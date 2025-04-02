@@ -100,8 +100,9 @@ export function BusAnimation({ busActivity }) {
 
   return (
     <div className="w-full h-full relative">
-      <div className="absolute left-0 right-0 h-2 bg-gray-700 top-1/2 transform -translate-y-1/2"></div>
-
+      <div className="absolute h-2 bg-gray-700 top-1/2 transform -translate-y-1/2" 
+          style={{ left: "15%", width: "70.65%" }}>
+      </div>
       <div className="absolute w-2 h-12 bg-gray-700 left-[15%] top-0"></div>
       <div className="absolute w-2 h-12 bg-gray-700 left-[50%] top-0"></div>
       <div className="absolute w-2 h-12 bg-gray-700 left-[85%] top-0"></div>

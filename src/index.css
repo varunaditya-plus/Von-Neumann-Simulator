@@ -134,3 +134,7 @@
 * {
   scrollbar-width: none;
 }
+
+*::selection {
+  background: #c9cdd45f;
+}
