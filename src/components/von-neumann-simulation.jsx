@@ -130,11 +130,11 @@ export function VonNeumannSimulation() {
         timeoutRef.current = setTimeout(() => {
           // Determine which execute step to go to based on the instruction
           if (cir?.startsWith("LOAD")) {
-            setCurrentStep("execute-load");
+            setCurrentStep("execute-load-1");
           } else if (cir?.startsWith("ADD")) {
-            setCurrentStep("execute-add");
+            setCurrentStep("execute-add-1");
           } else if (cir?.startsWith("STORE")) {
-            setCurrentStep("execute-store");
+            setCurrentStep("execute-store-1");
           } else if (cir?.startsWith("HALT")) {
             setCurrentStep("execute-halt");
           }
@@ -142,155 +142,205 @@ export function VonNeumannSimulation() {
         }, 1000);
         break;
 
-      case "execute-load":
+      case "execute-load-1":
         const loadAddress = Number.parseInt(cir?.split(" ")[1] || "0");
-
+        
         // First set MAR with the address
         setMar(loadAddress);
         setBusActivity(null);
         setActiveElement("mar");
-
+        
         timeoutRef.current = setTimeout(() => {
-          // Then fetch from RAM using address bus
-          setBusActivity({
-            type: "address",
-            source: "cu",
-            destination: "ram",
-            purpose:
-              "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from.",
-          });
-          setActiveElement(`ram-${loadAddress}`);
-
-          timeoutRef.current = setTimeout(() => {
-            // Then get data back via data bus
-            setMdr(ram[loadAddress]);
-            setBusActivity({
-              type: "data",
-              source: "ram",
-              destination: "cu",
-              purpose:
-                "The data bus is carrying the data value from RAM back to the Memory Data Register (MDR) in the CPU.",
-            });
-            setActiveElement("mdr");
-
-            timeoutRef.current = setTimeout(() => {
-              // Finally update ACC
-              setAcc(Number.parseInt(ram[loadAddress]));
-              setBusActivity({
-                type: "control",
-                source: "cu",
-                destination: "alu",
-                purpose:
-                  "The control bus is carrying control signals to load the value from MDR into the Accumulator (ACC) in the ALU.",
-              });
-              setActiveElement("acc");
-
-              timeoutRef.current = setTimeout(() => {
-                // Go back to fetch cycle
-                setCurrentStep("fetch-pc-to-mar");
-                setIsExecutingStep(false);
-              }, 1000);
-            }, 1000);
-          }, 1000);
+          setCurrentStep("execute-load-2");
+          setIsExecutingStep(false);
         }, 1000);
         break;
 
-      case "execute-add":
-        const addAddress = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-load-2":
+        const loadAddr = Number.parseInt(cir?.split(" ")[1] || "0");
+        // Then fetch from RAM using address bus
+        setBusActivity({
+          type: "address",
+          source: "cu",
+          destination: "ram",
+          purpose:
+            "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from.",
+        });
+        setActiveElement(`ram-${loadAddr}`);
+        timeoutRef.current = setTimeout(() => {
+          setCurrentStep("execute-load-3");
+          setIsExecutingStep(false);
+        }, 1000);
+        break;
 
+      case "execute-load-3":
+        const loadAddr2 = Number.parseInt(cir?.split(" ")[1] || "0");
+        // Then get data back via data bus
+        setMdr(ram[loadAddr2]);
+        setBusActivity({
+          type: "data",
+          source: "ram",
+          destination: "cu",
+          purpose:
+            "The data bus is carrying the data value from RAM back to the Memory Data Register (MDR) in the CPU.",
+        });
+        setActiveElement("mdr");
+        
+        timeoutRef.current = setTimeout(() => {
+          setCurrentStep("execute-load-4");
+          setIsExecutingStep(false);
+        }, 1000);
+        break;
+
+      case "execute-load-4":
+        const loadAddr3 = Number.parseInt(cir?.split(" ")[1] || "0");
+        // Finally update ACC
+        setAcc(Number.parseInt(ram[loadAddr3]));
+        setBusActivity({
+          type: "control",
+          source: "cu",
+          destination: "alu",
+          purpose:
+            "The control bus is carrying control signals to load the value from MDR into the Accumulator (ACC) in the ALU.",
+        });
+        setActiveElement("acc");
+        
+        timeoutRef.current = setTimeout(() => {
+          // Go back to fetch cycle
+          setCurrentStep("fetch-pc-to-mar");
+          setIsExecutingStep(false);
+        }, 1000);
+        break;
+
+      case "execute-add-1":
+        const addAddress = Number.parseInt(cir?.split(" ")[1] || "0");
+        
         // First set MAR with the address
         setMar(addAddress);
         setBusActivity(null);
         setActiveElement("mar");
-
+        
         timeoutRef.current = setTimeout(() => {
-          // Then fetch from RAM using address bus
-          setBusActivity({
-            type: "address",
-            source: "cu",
-            destination: "ram",
-            purpose:
-              "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from for addition.",
-          });
-          setActiveElement(`ram-${addAddress}`);
-
-          timeoutRef.current = setTimeout(() => {
-            // Then get data back via data bus
-            setMdr(ram[addAddress]);
-            setBusActivity({
-              type: "data",
-              source: "ram",
-              destination: "cu",
-              purpose:
-                "The data bus is carrying the data value from RAM back to the Memory Data Register (MDR) in the CPU for the addition operation.",
-            });
-            setActiveElement("mdr");
-
-            timeoutRef.current = setTimeout(() => {
-              // Finally update ACC with addition
-              const newAcc = acc + Number.parseInt(ram[addAddress]);
-              setAcc(newAcc);
-              setBusActivity({
-                type: "control",
-                source: "cu",
-                destination: "alu",
-                purpose:
-                  "The control bus is carrying control signals to the ALU to add the value from MDR to the current value in the Accumulator (ACC).",
-              });
-              setActiveElement("acc");
-
-              timeoutRef.current = setTimeout(() => {
-                // Go back to fetch cycle
-                setCurrentStep("fetch-pc-to-mar");
-                setIsExecutingStep(false);
-              }, 1000);
-            }, 1000);
-          }, 1000);
+          setCurrentStep("execute-add-2");
+          setIsExecutingStep(false);
         }, 1000);
         break;
 
-      case "execute-store":
-        const storeAddress = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-add-2":
+        const addAddr = Number.parseInt(cir?.split(" ")[1] || "0");
+        // Then fetch from RAM using address bus
+        setBusActivity({
+          type: "address",
+          source: "cu",
+          destination: "ram",
+          purpose:
+            "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from for addition.",
+        });
+        setActiveElement(`ram-${addAddr}`);
+        timeoutRef.current = setTimeout(() => {
+          setCurrentStep("execute-add-3");
+          setIsExecutingStep(false);
+        }, 1000);
+        break;
 
+      case "execute-add-3":
+        const addAddr2 = Number.parseInt(cir?.split(" ")[1] || "0");
+        // Then get data back via data bus
+        setMdr(ram[addAddr2]);
+        setBusActivity({
+          type: "data",
+          source: "ram",
+          destination: "cu",
+          purpose:
+            "The data bus is carrying the data value from RAM back to the Memory Data Register (MDR) in the CPU for the addition operation.",
+        });
+        setActiveElement("mdr");
+        
+        timeoutRef.current = setTimeout(() => {
+          setCurrentStep("execute-add-4");
+          setIsExecutingStep(false);
+        }, 1000);
+        break;
+
+      case "execute-add-4":
+        const addAddr3 = Number.parseInt(cir?.split(" ")[1] || "0");
+        // Finally update ACC with addition
+        const newAcc = acc + Number.parseInt(ram[addAddr3]);
+        setAcc(newAcc);
+        setBusActivity({
+          type: "control",
+          source: "cu",
+          destination: "alu",
+          purpose:
+            "The control bus is carrying control signals to the ALU to add the value from MDR to the current value in the Accumulator (ACC).",
+        });
+        setActiveElement("acc");
+        
+        timeoutRef.current = setTimeout(() => {
+          // Go back to fetch cycle
+          setCurrentStep("fetch-pc-to-mar");
+          setIsExecutingStep(false);
+        }, 1000);
+        break;
+
+      case "execute-store-1":
+        const storeAddress = Number.parseInt(cir?.split(" ")[1] || "0");
+        
         // First set MAR with the address
         setMar(storeAddress);
         setBusActivity(null);
         setActiveElement("mar");
-
+        
         timeoutRef.current = setTimeout(() => {
-          // Then set MDR with ACC value
-          setMdr(acc.toString());
-          setBusActivity(null);
-          setActiveElement("mdr");
+          setCurrentStep("execute-store-2");
+          setIsExecutingStep(false);
+        }, 1000);
+        break;
 
-          timeoutRef.current = setTimeout(() => {
-            // Send address to RAM
-            setBusActivity({
-              type: "address",
-              source: "cu",
-              destination: "ram",
-              purpose:
-                "The address bus is carrying the memory address from MAR to RAM to specify which memory location to write the data to.",
-            });
-            setActiveElement(`ram-${storeAddress}`);
+      case "execute-store-2":
+        // Then set MDR with ACC value
+        setMdr(acc.toString());
+        setBusActivity(null);
+        setActiveElement("mdr");
+        
+        timeoutRef.current = setTimeout(() => {
+          setCurrentStep("execute-store-3");
+          setIsExecutingStep(false);
+        }, 1000);
+        break;
 
-            timeoutRef.current = setTimeout(() => {
-              // Send data to RAM
-              ram[storeAddress] = acc.toString();
-              setBusActivity({
-                type: "data",
-                source: "cu",
-                destination: "ram",
-                purpose: "The data bus is carrying the data value from MDR to be stored at the specified RAM location.",
-              });
+      case "execute-store-3":
+        const storeAddr = Number.parseInt(cir?.split(" ")[1] || "0");
+        // Send address to RAM
+        setBusActivity({
+          type: "address",
+          source: "cu",
+          destination: "ram",
+          purpose:
+            "The address bus is carrying the memory address from MAR to RAM to specify which memory location to write the data to.",
+        });
+        setActiveElement(`ram-${storeAddr}`);
+        timeoutRef.current = setTimeout(() => {
+          setCurrentStep("execute-store-4");
+          setIsExecutingStep(false);
+        }, 1000);
+        break;
 
-              timeoutRef.current = setTimeout(() => {
-                // Go back to fetch cycle
-                setCurrentStep("fetch-pc-to-mar");
-                setIsExecutingStep(false);
-              }, 1000);
-            }, 1000);
-          }, 1000);
+      case "execute-store-4":
+        const storeAddr2 = Number.parseInt(cir?.split(" ")[1] || "0");
+        // Send data to RAM
+        ram[storeAddr2] = acc.toString();
+        setBusActivity({
+          type: "data",
+          source: "cu",
+          destination: "ram",
+          purpose: "The data bus is carrying the data value from MDR to be stored at the specified RAM location.",
+        });
+        
+        timeoutRef.current = setTimeout(() => {
+          // Go back to fetch cycle
+          setCurrentStep("fetch-pc-to-mar");
+          setIsExecutingStep(false);
         }, 1000);
         break;
 
@@ -338,14 +388,36 @@ export function VonNeumannSimulation() {
         return "The Program Counter is incremented (the next instruction will now commence)";
       case "decode":
         return "The CPU analyzes the instruction to determine what operation to perform";
-      case "execute-load":
-        return "The CPU loads a value from memory into the Accumulator";
-      case "execute-add":
-        return "The CPU adds a value from memory to the Accumulator";
-      case "execute-store":
-        return "The CPU stores the Accumulator value into memory";
+      case "execute-load-1":
+        return "The CPU prepares to load by setting the Memory Address Register";
+      case "execute-load-2":
+        return "The CPU sends the address to RAM via the address bus";
+      case "execute-load-3":
+        return "The CPU receives the data from RAM into the MDR";
+      case "execute-load-4":
+        return "The CPU loads the value from MDR into the Accumulator";
+      
+      case "execute-add-1":
+        return "The CPU prepares to add by setting the Memory Address Register";
+      case "execute-add-2":
+        return "The CPU sends the address to RAM via the address bus";
+      case "execute-add-3":
+        return "The CPU receives the data from RAM into the MDR";
+      case "execute-add-4":
+        return "The CPU adds the value from MDR to the Accumulator";
+      
+      case "execute-store-1":
+        return "The CPU prepares to store by setting the Memory Address Register";
+      case "execute-store-2":
+        return "The CPU copies the Accumulator value to the MDR";
+      case "execute-store-3":
+        return "The CPU sends the address to RAM via the address bus";
+      case "execute-store-4":
+        return "The CPU sends the data from MDR to RAM via the data bus";
+      
       case "execute-halt":
         return "The CPU stops execution as instructed by the HALT command";
+      
       default:
         return "";
     }
@@ -366,12 +438,30 @@ export function VonNeumannSimulation() {
         return "The Program Counter is increased by 1 to prepare for the next instruction fetch.";
       case "decode":
         return "The Control Unit analyzes the instruction in CIR to determine the operation and operands needed.";
-      case "execute-load":
-        return "The LOAD instruction fetches a value from memory and stores it in the Accumulator (ACC).";
-      case "execute-add":
-        return "The ADD instruction retrieves a value from memory and adds it to the current Accumulator value using the ALU.";
-      case "execute-store":
-        return "The STORE instruction writes the current Accumulator value to the specified memory address.";
+      case "execute-load-1":
+        return "The CPU extracts the address from the LOAD instruction and places it in the Memory Address Register (MAR).";
+      case "execute-load-2":
+        return "The address in MAR is sent to RAM via the address bus to locate the data to be loaded.";
+      case "execute-load-3":
+        return "The data at the specified memory address is loaded into the Memory Data Register (MDR) via the data bus.";
+      case "execute-load-4":
+        return "The value in MDR is transferred to the Accumulator (ACC) in the ALU via the control bus.";
+      case "execute-add-1":
+        return "The CPU extracts the address from the ADD instruction and places it in the Memory Address Register (MAR).";
+      case "execute-add-2":
+        return "The address in MAR is sent to RAM via the address bus to locate the data to be added.";
+      case "execute-add-3":
+        return "The data at the specified memory address is loaded into the Memory Data Register (MDR) via the data bus.";
+      case "execute-add-4":
+        return "The ALU adds the value in MDR to the current value in the Accumulator (ACC) and stores the result in ACC.";
+      case "execute-store-1":
+        return "The CPU extracts the address from the STORE instruction and places it in the Memory Address Register (MAR).";
+      case "execute-store-2":
+        return "The current value in the Accumulator (ACC) is copied to the Memory Data Register (MDR) to prepare for storage.";
+      case "execute-store-3":
+        return "The address in MAR is sent to RAM via the address bus to specify where to store the data.";
+      case "execute-store-4":
+        return "The value in MDR is sent to the specified RAM location via the data bus, completing the store operation.";
       case "execute-halt":
         return "The HALT instruction stops the CPU execution until the system is reset.";
       default:
