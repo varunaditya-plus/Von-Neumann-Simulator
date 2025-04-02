@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Bus } from "lucide-react";
 
 export function BusAnimation({ busActivity }) {
   const [dotPosition, setDotPosition] = useState({ left: "15%", top: "0%" });
@@ -107,16 +108,20 @@ export function BusAnimation({ busActivity }) {
 
       {busActivity && isBusMoving(busActivity.source, busActivity.destination) && (
         <div
-          className={`absolute w-4 h-4 rounded-full transform -translate-x-1/2 -translate-y-1/2 ${
-            busActivity ? getBusColor(busActivity.type) : "bg-gray-500"
-          }`}
+          className="absolute transform -translate-x-1/2 -translate-y-1/2"
           style={{
             left: dotPosition.left,
             top: dotPosition.top,
             opacity: dotVisible ? 1 : 0,
             transition: "left 300ms linear, top 300ms linear"
           }}
-        ></div>
+        >
+          <Bus 
+            size={20} 
+            className={`${busActivity ? getBusColor(busActivity.type) : "text-gray-500"} p-1 rounded-lg ml-2`}
+            color="white"
+          />
+        </div>
       )}
 
       <div className="absolute text-xs font-bold left-[15%] top-0 transform -translate-x-1/2 -translate-y-6">
