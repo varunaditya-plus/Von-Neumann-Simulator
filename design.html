@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        * { scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-white min-h-screen w-screen flex flex-col items-center justify-center overflow-x-hidden">
+    <div class="flex flex-row gap-4 justify-center items-center h-full w-full mt-24">
+        <!-- CPU -->
+        <div class="bg-[#CCCCCC] p-4 rounded-2xl flex flex-col gap-4 w-[20rem] h-[27.5rem]">
+            <!-- Header -->
+            <div class="bg-[#669C51] p-2 flex flex-row justify-between items-center rounded-xl pb-6 pt-2">
+                <span class="font-semibold text-white text-lg leading-tight tracking-[0.02em]">Central Processing<br>Unit (CPU)</span>
+                <div class="flex flex-row items-end justify-end h-full -mb-10">
+                    <div class="grid grid-cols-2 grid-rows-2 w-8 h-8">
+                        <div class="w-3 h-3 bg-[#D9BE52] rounded-full col-start-2 row-start-1 justify-self-center self-center"></div>
+                        <div class="w-3 h-3 bg-[#D9BE52] rounded-full col-start-1 row-start-2 justify-self-center self-center"></div>
+                        <div class="w-3 h-3 bg-[#D9BE52] rounded-full col-start-2 row-start-2 justify-self-center self-center"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CPU Registers -->
+            <div class="bg-white p-[1.15rem] pt-3 flex flex-col justify-between items-center rounded-xl gap-1.5 z-20">
+                <span class="font-bold text-black text-md leading-snug tracking-[0.02em] text-center w-full mb-1">Registers</span>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">PC</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">MAR</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">MDR</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+            </div>
+
+            <div class="flex flex-row gap-2">
+                <!-- Control unit -->
+                <div class="bg-[#af8541] p-[1.15rem] py-5 flex flex-col justify-between items-center rounded-xl gap-1 h-32 w-[8.5rem] z-20">
+                    <span class="font-bold text-white text-md leading-snug tracking-[0.02em] text-center w-full">Control Unit</span>
+                    <div class="flex flex-col w-full h-full">
+                        <span class="bg-[#FFC15E] text-[#382600] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">CIR</span>
+                        <span class="bg-[#E6E6E6] w-full h-8 py-1 px-2 flex items-center justify-start text-sm"></span>
+                    </div>
+                </div>
+
+                <!-- ALU Register -->
+                <div class="bg-black p-[1.15rem] py-5 flex flex-col justify-between items-center rounded-xl gap-1 h-32 w-[7rem] z-20">
+                    <span class="font-bold text-white text-md leading-snug tracking-[0.02em] text-left w-full">ALU</span>
+                    <div class="flex flex-col w-full h-full">
+                        <span class="bg-[#4691E0] text-[#001938] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">ACC</span>
+                        <span class="bg-[#2C2E32] w-full h-8 py-1 px-2 flex items-center justify-start text-sm"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bus connectors -->
+            <div class="relative z-10">
+                <div class="absolute bottom-0 right-0 w-4 h-12 bg-[#8e6e3a]" style="transform: translateX(-10.5rem) translateY(1.025rem)"></div>
+                <div class="absolute bottom-0 right-0 w-4 h-12 bg-[#37383A]" style="transform: translateX(-3rem) translateY(1.025rem)"></div>
+                <div class="absolute bottom-0 right-0 w-4 h-48 bg-[#ebeced]" style="transform: translateY(1.025rem)"></div>
+            </div>
+        </div>
+
+        <!-- RAM -->
+        <div class="bg-[#009B99] p-4 rounded-2xl flex flex-col w-[20rem] h-[27.5em]">
+            <!-- Header -->
+            <div class="bg-[#00D2C0] p-2 flex flex-row justify-between items-center rounded-t-xl pb-6 pt-2">
+                <span class="font-semibold text-white text-lg leading-tight tracking-[0.02em]">Random Access<br>Memory (RAM)</span>
+                <div class="flex flex-row items-end justify-end h-full -mb-10">
+                    <div class="grid grid-cols-2 grid-rows-2 w-8 h-8">
+                        <div class="w-3 h-3 bg-[#009B99] rounded-full col-start-2 row-start-1 justify-self-center self-center"></div>
+                        <div class="w-3 h-3 bg-[#009B99] rounded-full col-start-1 row-start-2 justify-self-center self-center"></div>
+                        <div class="w-3 h-3 bg-[#009B99] rounded-full col-start-2 row-start-2 justify-self-center self-center"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RAM Slots -->
+            <div class="bg-white p-[1.15rem] pt-3 flex flex-col justify-between items-center rounded-b-xl gap-1.5 h-full overflow-auto z-20">
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">0001</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">0010</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">0011</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#382600] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">0100</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">0101</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">0110</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">0111</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#382600] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">1000</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">1001</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">1010</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">1011</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+                <div class="flex flex-row w-full h-full">
+                    <span class="bg-[#00D2C0] text-[#382600] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">1100</span>
+                    <span class="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm"></span>
+                </div>
+            </div>
+
+            <!-- Bus connector -->
+            <div class="relative z-10">
+                <div class="absolute bottom-0 right-0 w-4 h-16 bg-[#CBE6E3]" style="transform: translateX(-850%) translateY(2rem)"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bus line -->
+    <div class="w-[41rem] h-3 bg-[#A8AAAF] rounded-full mt-4"></div>
+</body>
+</html>

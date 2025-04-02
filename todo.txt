@@ -1,2 +1,0 @@
-1. Slow down the execute step
-2. Make three different bus elements instead of the same one being reused for everything
