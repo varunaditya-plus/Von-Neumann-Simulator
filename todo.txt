@@ -1,0 +1,3 @@
+1. Split up von-neumann-simulation.jsx into different components
+2. Make the result of each step (with a bus) appear after the bus has moved to the place
+3. Make the website work in most common aspect ratios instead of one (max-w-5xl) 💀

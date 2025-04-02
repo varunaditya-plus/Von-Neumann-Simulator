@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { BusAnimation } from "./bus-animation";
 import { Bus, Rows3 } from "lucide-react";
@@ -365,7 +364,7 @@ export function VonNeumannSimulation() {
   }, []);
 
   return (
-    <div className="space-y-6 mt-4">
+    <div className="space-y-6 mt-8">
       <div className="bg-[#eaecf0] text-gray-950 p-4 rounded-t-lg text-center text-xl !mb-0">
         <div>{getCurrentCycleName(currentStep)} → {getStepDescription(currentStep)}</div>
       </div>
@@ -511,21 +510,6 @@ export function VonNeumannSimulation() {
         </Dialog>
       </div>
 
-      {/* Bus Purpose Display */}
-      {busActivity && (
-        <div className="flex items-center justify-center mb-4 -mt-6 text-sm">
-          <div className={`w-3 h-3 rounded-full mr-2 ${
-              busActivity.type === "address"
-                ? "bg-blue-500"
-                : busActivity.type === "data"
-                  ? "bg-red-500"
-                  : "bg-green-500"
-            }`}
-          ></div>
-          <p className="text-gray-700">{busActivity.purpose}</p>
-        </div>
-      )}
-
       <div className="flex flex-row gap-4 justify-center items-center h-full w-full mt-8">
         {/* CPU */}
         <div className={`bg-[#CCCCCC] p-4 rounded-2xl flex flex-col gap-4 w-[20rem] h-[27.5rem] relative ${
@@ -628,6 +612,21 @@ export function VonNeumannSimulation() {
 
       {/* Bus Animation Component */}
       <BusAnimation busActivity={busActivity} />
+
+      {/* Bus Purpose Display */}
+      {busActivity && (
+        <div className="flex items-center justify-center mb-4 -mt-6 text-sm">
+          <div className={`w-3 h-3 rounded-full mr-2 ${
+              busActivity.type === "address"
+                ? "bg-blue-500"
+                : busActivity.type === "data"
+                  ? "bg-red-500"
+                  : "bg-green-500"
+            }`}
+          ></div>
+          <p className="text-gray-700">{busActivity.purpose}</p>
+        </div>
+      )}
     </div>
   );
 }

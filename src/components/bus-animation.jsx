@@ -3,10 +3,7 @@ import { Bus } from "lucide-react";
 import { useSpring, animated } from "@react-spring/web";
 
 export function BusAnimation({ busActivity }) {
-  const [dotVisible, setDotVisible] = useState(false);
   const [animationInProgress, setAnimationInProgress] = useState(false);
-  const [currentPathIndex, setCurrentPathIndex] = useState(0);
-  const [animationPath, setAnimationPath] = useState([]);
 
   const [springProps, api] = useSpring(() => ({
     from: { left: "15%", top: "0%", opacity: 0 },
@@ -81,9 +78,7 @@ export function BusAnimation({ busActivity }) {
   useEffect(() => {
     // Reset animation when busActivity changes
     if (busActivity === null) {
-      setDotVisible(false);
       setAnimationInProgress(false);
-      setCurrentPathIndex(0);
       return;
     }
 
@@ -91,11 +86,8 @@ export function BusAnimation({ busActivity }) {
       if (isBusMoving(busActivity.source, busActivity.destination)) {
         // Create the animation path
         const path = createAnimationPath(busActivity.source, busActivity.destination);
-        setAnimationPath(path);
         
         setAnimationInProgress(true);
-        setCurrentPathIndex(0);
-        setDotVisible(true);
         
         // Start the animation sequence
         api.set({ ...path[0], opacity: 0 });
@@ -111,7 +103,6 @@ export function BusAnimation({ busActivity }) {
       // Animation complete
       setTimeout(() => {
         api.start({ opacity: 0 });
-        setDotVisible(false);
         setAnimationInProgress(false);
       }, 200);
       return;
@@ -121,7 +112,6 @@ export function BusAnimation({ busActivity }) {
       ...path[index],
       opacity: 1,
       onRest: () => {
-        setCurrentPathIndex(index);
         setTimeout(() => {
           animateAlongPath(path, index + 1);
         }, 50);
