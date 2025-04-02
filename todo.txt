@@ -1,4 +1,2 @@
-1. Remove the annoying glitching of the busses
-2. Make the buses go up the connectors
-3. Grey out 'Next Step' button when the simulation commences
-4. Slow down the execute step
+1. Grey out 'Next Step' button when the simulation commences
+2. Slow down the execute step

@@ -314,15 +314,15 @@ export function VonNeumannSimulation() {
   const getStepDescription = () => {
     switch (currentStep) {
       case "fetch-pc-to-mar":
-        return "The Program Counter value is copied to the Memory Address Register";
+        return "The Program Counter's value is copied to the Memory Address Register";
       case "fetch-mar-to-ram":
-        return "The address in MAR is sent to RAM to locate the instruction";
+        return "The address in MAR is sent to RAM to find the instruction";
       case "fetch-ram-to-mdr":
         return "The instruction at the specified address is loaded into the MDR";
       case "fetch-mdr-to-cir":
-        return "The instruction in MDR is transferred to the Current Instruction Register";
+        return "The instruction in MDR is copied to the Current Instruction Register";
       case "fetch-increment-pc":
-        return "The Program Counter is incremented to point to the next instruction";
+        return "The Program Counter is incremented (the next instruction will now commence)";
       case "decode":
         return "The CPU analyzes the instruction to determine what operation to perform";
       case "execute-load":
@@ -342,25 +342,25 @@ export function VonNeumannSimulation() {
   const getStepExplanation = () => {
     switch (currentStep) {
       case "fetch-pc-to-mar":
-        return "The Program Counter (PC) contains the address of the next instruction to be executed. This address is copied to the Memory Address Register (MAR) so the CPU can access that memory location.";
+        return "The Program Counter (PC) value is copied to the Memory Address Register (MAR) to specify which memory location to access.";
       case "fetch-mar-to-ram":
-        return "The address stored in the MAR is sent to RAM via the address bus. This tells the memory system exactly which location needs to be accessed to retrieve the instruction.";
+        return "The address stored in the MAR is sent to RAM via the address bus to locate the instruction.";
       case "fetch-ram-to-mdr":
-        return "The instruction stored at the memory address specified by MAR is retrieved and placed into the Memory Data Register (MDR). The data travels from RAM to the CPU via the data bus.";
+        return "The instruction at the specified memory address is loaded into the Memory Data Register (MDR) via the data bus.";
       case "fetch-mdr-to-cir":
-        return "The instruction now in the MDR is transferred to the Current Instruction Register (CIR). This prepares the instruction for decoding and execution by the CPU.";
+        return "The instruction in MDR is transferred to the Current Instruction Register (CIR) for processing.";
       case "fetch-increment-pc":
-        return "The Program Counter is increased by 1 to point to the next instruction in sequence. This happens before the current instruction is executed, ensuring the CPU is ready for the next fetch cycle.";
+        return "The Program Counter is increased by 1 to prepare for the next instruction fetch.";
       case "decode":
-        return "The Control Unit analyzes the instruction in the CIR to determine what operation needs to be performed. It identifies the opcode (operation code) and any operands (data or addresses) needed for execution.";
+        return "The Control Unit analyzes the instruction in CIR to determine the operation and operands needed.";
       case "execute-load":
-        return "The LOAD instruction retrieves a value from the specified memory address and places it in the Accumulator (ACC). This involves setting the MAR with the target address, retrieving the data via the data bus, and storing it in the ACC.";
+        return "The LOAD instruction fetches a value from memory and stores it in the Accumulator (ACC).";
       case "execute-add":
-        return "The ADD instruction retrieves a value from the specified memory address and adds it to the current value in the Accumulator. This arithmetic operation is performed by the ALU (Arithmetic Logic Unit).";
+        return "The ADD instruction retrieves a value from memory and adds it to the current Accumulator value using the ALU.";
       case "execute-store":
-        return "The STORE instruction takes the current value in the Accumulator and writes it to the specified memory address. The CPU sets the MAR with the target address and sends the ACC value via the data bus to be stored in RAM.";
+        return "The STORE instruction writes the current Accumulator value to the specified memory address.";
       case "execute-halt":
-        return "The HALT instruction signals the CPU to stop executing instructions. This effectively ends the program's execution until the system is reset or a new program is loaded.";
+        return "The HALT instruction stops the CPU execution until the system is reset.";
       default:
         return "";
     }

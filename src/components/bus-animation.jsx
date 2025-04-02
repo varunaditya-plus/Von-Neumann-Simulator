@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 
 export function BusAnimation({ busActivity }) {
-  const [dotPosition, setDotPosition] = useState({ left: "15%", top: "50%" });
+  const [dotPosition, setDotPosition] = useState({ left: "15%", top: "0%" });
   const [dotVisible, setDotVisible] = useState(false);
   const [animationInProgress, setAnimationInProgress] = useState(false);
+  const [animationPath, setAnimationPath] = useState([]);
+  const [currentPathIndex, setCurrentPathIndex] = useState(0);
 
   // Get position based on component name
   const getPosition = (component) => {
@@ -38,32 +40,62 @@ export function BusAnimation({ busActivity }) {
     return source !== destination;
   };
 
+  // Create animation path from source to destination
+  const createAnimationPath = (source, destination) => {
+    const sourcePos = getPosition(source);
+    const destPos = getPosition(destination);
+    
+    return [
+      { left: sourcePos, top: "0%" },
+      { left: sourcePos, top: "50%" },
+      { left: destPos, top: "50%" },
+      { left: destPos, top: "0%" }
+    ];
+  };
+
   useEffect(() => {
+    // Reset animation when busActivity changes
+    if (busActivity === null) {
+      setDotVisible(false);
+      setAnimationInProgress(false);
+      setCurrentPathIndex(0);
+      return;
+    }
+
     if (busActivity && !animationInProgress) {
       if (isBusMoving(busActivity.source, busActivity.destination)) {
+        // Create the animation path
+        const path = createAnimationPath(busActivity.source, busActivity.destination);
+        setAnimationPath(path);
+        
         setAnimationInProgress(true);
-
-        // Set initial position
-        const startPos = getPosition(busActivity.source);
-        setDotPosition({ left: startPos, top: "50%" });
+        setCurrentPathIndex(0);
+        setDotPosition(path[0]);
         setDotVisible(true);
-
-        // Use requestAnimationFrame to ensure smooth animation
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            const endPos = getPosition(busActivity.destination);
-            setDotPosition({ left: endPos, top: "50%" });
-
-            // Hide dot after animation completes
-            setTimeout(() => {
-              setDotVisible(false);
-              setAnimationInProgress(false);
-            }, 500);
-          }, 50);
-        });
+        
+        // Start the animation sequence
+        animateAlongPath(path, 0);
       }
     }
-  }, [busActivity, animationInProgress]);
+  }, [busActivity]);
+
+  const animateAlongPath = (path, index) => {
+    if (index >= path.length) {
+      // Animation complete
+      setTimeout(() => {
+        setDotVisible(false);
+        setAnimationInProgress(false);
+      }, 200);
+      return;
+    }
+
+    setDotPosition(path[index]);
+    setCurrentPathIndex(index);
+    
+    setTimeout(() => {
+      animateAlongPath(path, index + 1);
+    }, 300);
+  };
 
   return (
     <div className="w-full h-full relative">
@@ -75,13 +107,14 @@ export function BusAnimation({ busActivity }) {
 
       {busActivity && isBusMoving(busActivity.source, busActivity.destination) && (
         <div
-          className={`absolute w-4 h-4 rounded-full transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-in-out ${
+          className={`absolute w-4 h-4 rounded-full transform -translate-x-1/2 -translate-y-1/2 ${
             busActivity ? getBusColor(busActivity.type) : "bg-gray-500"
           }`}
           style={{
             left: dotPosition.left,
             top: dotPosition.top,
             opacity: dotVisible ? 1 : 0,
+            transition: "left 300ms linear, top 300ms linear"
           }}
         ></div>
       )}
