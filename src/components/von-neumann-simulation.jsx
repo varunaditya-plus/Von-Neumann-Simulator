@@ -16,6 +16,7 @@ export function VonNeumannSimulation() {
   const [busActivity, setBusActivity] = useState(null); // the bus's current activity
   const [isHalted, setIsHalted] = useState(false); // if the simulation halted yet
   const [activeElement, setActiveElement] = useState(null); // the current active element in the simulation
+  const [isExecutingStep, setIsExecutingStep] = useState(false); // Track if a step is currently being executed
 
   const ram = [
     "LOAD 5", // 0: Load address 5 value into ACC
@@ -40,13 +41,15 @@ export function VonNeumannSimulation() {
     setBusActivity(null);
     setIsHalted(false);
     setActiveElement(null);
+    setIsExecutingStep(false);
 
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); }
   };
 
   const nextStep = () => {
-    if (isHalted) return;
+    if (isHalted || isExecutingStep) return;
 
+    setIsExecutingStep(true);
     setActiveElement(null);
 
     switch (currentStep) {
@@ -60,6 +63,7 @@ export function VonNeumannSimulation() {
           timeoutRef.current = setTimeout(() => {
             setCurrentStep("fetch-mar-to-ram");
             setActiveElement(null);
+            setIsExecutingStep(false);
           }, 1000);
         }, 1000);
         break;
@@ -76,6 +80,7 @@ export function VonNeumannSimulation() {
         setActiveElement(`ram-${mar}`);
         timeoutRef.current = setTimeout(() => {
           setCurrentStep("fetch-ram-to-mdr");
+          setIsExecutingStep(false);
         }, 1000);
         break;
 
@@ -92,6 +97,7 @@ export function VonNeumannSimulation() {
         setActiveElement("mdr");
         timeoutRef.current = setTimeout(() => {
           setCurrentStep("fetch-mdr-to-cir");
+          setIsExecutingStep(false);
         }, 1000);
         break;
 
@@ -102,6 +108,7 @@ export function VonNeumannSimulation() {
         setActiveElement("cir");
         timeoutRef.current = setTimeout(() => {
           setCurrentStep("fetch-increment-pc");
+          setIsExecutingStep(false);
         }, 1000);
         break;
 
@@ -112,6 +119,7 @@ export function VonNeumannSimulation() {
         setActiveElement("pc");
         timeoutRef.current = setTimeout(() => {
           setCurrentStep("decode");
+          setIsExecutingStep(false);
         }, 1000);
         break;
 
@@ -130,6 +138,7 @@ export function VonNeumannSimulation() {
           } else if (cir?.startsWith("HALT")) {
             setCurrentStep("execute-halt");
           }
+          setIsExecutingStep(false);
         }, 1000);
         break;
 
@@ -179,6 +188,7 @@ export function VonNeumannSimulation() {
               timeoutRef.current = setTimeout(() => {
                 // Go back to fetch cycle
                 setCurrentStep("fetch-pc-to-mar");
+                setIsExecutingStep(false);
               }, 1000);
             }, 1000);
           }, 1000);
@@ -232,6 +242,7 @@ export function VonNeumannSimulation() {
               timeoutRef.current = setTimeout(() => {
                 // Go back to fetch cycle
                 setCurrentStep("fetch-pc-to-mar");
+                setIsExecutingStep(false);
               }, 1000);
             }, 1000);
           }, 1000);
@@ -276,6 +287,7 @@ export function VonNeumannSimulation() {
               timeoutRef.current = setTimeout(() => {
                 // Go back to fetch cycle
                 setCurrentStep("fetch-pc-to-mar");
+                setIsExecutingStep(false);
               }, 1000);
             }, 1000);
           }, 1000);
@@ -285,6 +297,7 @@ export function VonNeumannSimulation() {
       case "execute-halt":
         setBusActivity(null);
         setIsHalted(true);
+        setIsExecutingStep(false);
         break;
     }
   };
@@ -369,7 +382,7 @@ export function VonNeumannSimulation() {
   return (
     <div className="space-y-6 mt-4">
       <div className="bg-[#eaecf0] text-gray-950 p-4 rounded-t-lg text-center text-xl !mb-0">
-        <div>{getCurrentCycleName()} → {getStepDescription()}</div>
+        <div>{getCurrentCycleName()} → {getStepDescription()}</div>
       </div>
 
       <div className="bg-gray-100 p-4 rounded-b-lg text-gray-800">
@@ -377,8 +390,12 @@ export function VonNeumannSimulation() {
       </div>
 
       <div className="flex justify-center space-x-4 mt-6">
-        <Button onClick={nextStep} disabled={isHalted} className="bg-green-600 hover:bg-green-700 cursor-pointer">
-          Next Step
+        <Button 
+          onClick={nextStep} 
+          disabled={isHalted || isExecutingStep} 
+          className={`${isHalted || isExecutingStep ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} cursor-pointer`}
+        >
+          {isExecutingStep ? "Executing..." : "Next Step"}
         </Button>
         <Button onClick={resetSimulation} variant="outline" className="hover:!border-[#babfc6] cursor-pointer">
           Reset
