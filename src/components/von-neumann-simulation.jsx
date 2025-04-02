@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { BusAnimation } from "./bus-animation";
-import { Bus } from "lucide-react";
+import { Bus, Rows3 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { getCurrentCycleName } from "../utils/getCycleName";
 import { getStepDescription } from "../utils/getStepDescription";
@@ -434,6 +434,78 @@ export function VonNeumannSimulation() {
                   The Control Bus carries signals between the CPU and components (like RAM). These signals decide 
                   the what kind operations is being carried out (read/write), the timing, and other operation-specific stuff. It includes signals 
                   like read/write, interrupt requests, and more.
+                </p>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button className="bg-purple-500 hover:bg-purple-600 flex items-center gap-2 cursor-pointer">
+              <Rows3 size={18} />
+              Registers
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md md:max-w-xl lg:max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>The registers in Von Neumann Architecture</DialogTitle>
+              <DialogDescription>
+                These are the descriptions of the main registers used in the Von Neumann architecture and what they do
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <div className="w-6 h-6 rounded-full bg-purple-500 mr-2"></div>
+                  <h3 className="font-bold">Program Counter (PC)</h3>
+                </div>
+                <p className="text-gray-700 pl-8">
+                  The Program Counter holds the memory address of the next instruction to be fetched and executed. 
+                  It automatically increments after each instruction fetch to point to the next instruction in sequence.
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <div className="w-6 h-6 rounded-full bg-orange-500 mr-2"></div>
+                  <h3 className="font-bold">Memory Address Register (MAR)</h3>
+                </div>
+                <p className="text-gray-700 pl-8">
+                  The MAR holds the address of the memory location that is going to be accessed (to be read/written to). 
+                  It connects to the address bus and specifies which memory location to interact with.
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <div className="w-6 h-6 rounded-full bg-pink-500 mr-2"></div>
+                  <h3 className="font-bold">Memory Data Register (MDR)</h3>
+                </div>
+                <p className="text-gray-700 pl-8">
+                  The MDR temporarily holds data being transferred between memory and the CPU. For a memory read, it receives 
+                  data from memory; for a memory write, it holds the data to be written to memory.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <div className="w-6 h-6 rounded-full bg-cyan-500 mr-2"></div>
+                  <h3 className="font-bold">Current Instruction Register (CIR)</h3>
+                </div>
+                <p className="text-gray-700 pl-8">
+                  The CIR holds the instruction currently being executed. After an instruction is fetched from memory, 
+                  it is stored here while being decoded and executed by the control unit.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <div className="w-6 h-6 rounded-full bg-yellow-500 mr-2"></div>
+                  <h3 className="font-bold">Accumulator (ACC)</h3>
+                </div>
+                <p className="text-gray-700 pl-8">
+                  The Accumulator is a special register in the ALU that holds the results of arithmetic and logical operations. 
+                  It acts as a temporary storage for data being processed and the final results of computations.
                 </p>
               </div>
             </div>
