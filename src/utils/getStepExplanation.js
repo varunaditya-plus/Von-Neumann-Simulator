@@ -1,3 +1,16 @@
+const ibExplanations = {
+  "fetch-cu-read": "The CU sends READ on the control bus; the address bus selects the RAM location in MAR.",
+  "execute-load-read": "The CU sends READ on the control bus to request the data from the RAM address held in MAR.",
+  "execute-add-read": "The CU sends READ on the control bus to request the operand at the RAM address in MAR.",
+  "execute-store-write": "The CU sends WRITE on the control bus, using the address in MAR and the value held in MDR.",
+  "execute-load-control": "The CU sends a control signal to the ALU to load the value in MDR into the accumulator (AC).",
+  "execute-add-control": "The CU sends a control signal to the ALU to add the value held in MDR to the accumulator (AC).",
+  "execute-load-4": "The value held in MDR is copied to the accumulator (AC) through an internal CPU data path.",
+  "execute-add-4": "The ALU adds the value held in MDR to the accumulator (AC), storing the result back in AC.",
+  "decode": "The CU decodes the instruction in IR to identify the operation and any operand needed.",
+  "fetch-increment-pc": "The Program Counter increases by 1 to hold the address of the next instruction to fetch.",
+};
+
 function explainStep(currentStep) {
   switch (currentStep) {
     case "fetch-pc-to-mar":
@@ -44,22 +57,7 @@ function explainStep(currentStep) {
 }
 
 export function getStepExplanation(currentStep, isIB = false) {
-  if (isIB) {
-    const explanations = {
-      "fetch-cu-read": "The CU sends a READ command on the control bus. The address bus selects the RAM location using MAR; the instruction returns on the data bus in the next step.",
-      "execute-load-read": "The CU sends a READ command on the control bus. RAM uses the address in MAR and returns the operand on the data bus.",
-      "execute-add-read": "The CU sends a READ command on the control bus to retrieve the operand at the address in MAR.",
-      "execute-store-write": "The CU sends a WRITE command on the control bus. The address is in MAR, and MDR holds the value that will be sent on the data bus.",
-      "execute-load-control": "The CU sends the ALU a control signal to load AC. The control signal selects the operation; the operand is transferred separately from MDR.",
-      "execute-add-control": "The CU sends the ALU a control signal to add. The signal selects the operation; the operand is transferred separately from MDR.",
-      "execute-load-4": "The value in MDR is transferred along an internal CPU data path to AC. Operand data is not carried by the control bus.",
-      "execute-add-4": "The ALU adds the value in MDR to AC and writes the result back to AC, under the control of the CU.",
-      "decode": "The CU decodes the opcode and operand in IR. LOAD, ADD and STORE are readable assembly mnemonics; actual machine instructions are encoded in binary.",
-      "fetch-increment-pc": "PC is incremented during fetch to hold the next instruction address. The instruction already in IR is decoded and executed next.",
-    };
-
-    if (explanations[currentStep]) return explanations[currentStep];
-  }
+  if (isIB && ibExplanations[currentStep]) return ibExplanations[currentStep];
 
   const explanation = explainStep(currentStep);
 

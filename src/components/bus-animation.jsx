@@ -1,9 +1,14 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Bus } from "lucide-react";
 
+const busColors = {
+  address: { badge: "bg-blue-500", stroke: "#3b82f6" },
+  data: { badge: "bg-red-500", stroke: "#ef4444" },
+  control: { badge: "bg-green-500", stroke: "#22c55e" },
+};
+
 export function BusAnimation({
-  busActivity,
-  step,
+  stepIndex,
   progress,
   duration,
   diagramRef,
@@ -13,49 +18,16 @@ export function BusAnimation({
   const railRef = useRef(null);
   const [geometry, setGeometry] = useState(null);
   const animationInProgress = progress > 0 && progress < 1;
-  const { animation } = step;
-
-  // Get position based on component name
-  const getPosition = useCallback((component) => {
-    switch (component) {
-      case "cu": return geometry?.ports.cu;
-      case "cir": return geometry?.ports.cu;
-      case "registers": return geometry?.ports.registers;
-      case "pc": return geometry?.ports.registers;
-      case "mar": return geometry?.ports.registers;
-      case "mdr": return geometry?.ports.registers;
-      case "alu": return geometry?.ports.alu;
-      case "acc": return geometry?.ports.alu;
-      case "ram": return geometry?.ports.ram;
-      default: return geometry?.ports.cu;
-    }
-  }, [geometry]);
-
-  // Get color based on bus type
-  const getBusColor = (type) => {
-    switch (type) {
-      case "address": return "bg-blue-500";
-      case "data": return "bg-red-500";
-      case "control": return "bg-green-500";
-      default: return "bg-gray-500";
-    }
-  };
-
-  // Check if the bus is actually moving between parts
-  const isBusMoving = useCallback((source, destination) => {
-    return source !== destination;
-  }, []);
+  const { animation, busActivity } = timeline[stepIndex];
 
   // Create animation path from source to destination
   const createAnimationPath = useCallback((source, destination, activity, kind) => {
-    const sourcePos = geometry?.nodes[source];
-    const destPos = geometry?.nodes[destination];
+    const sourcePos = geometry.nodes[source];
+    const destPos = geometry.nodes[destination];
 
-    if (!sourcePos || !destPos) return null;
-
-    if (activity && isBusMoving(activity.source, activity.destination)) {
-      const from = getPosition(activity.source);
-      const to = getPosition(activity.destination);
+    if (activity) {
+      const from = geometry.ports[activity.source];
+      const to = geometry.ports[activity.destination];
 
       return [
         sourcePos,
@@ -89,7 +61,7 @@ export function BusAnimation({
       { x: middleX, y: destPos.y },
       destPos,
     ];
-  }, [geometry, getPosition, isBusMoving]);
+  }, [geometry]);
 
   useEffect(() => {
     const diagram = diagramRef.current;
@@ -131,19 +103,32 @@ export function BusAnimation({
 
     const observer = new ResizeObserver(measure);
     observer.observe(diagram);
-    window.addEventListener("resize", measure);
 
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", measure);
     };
   }, [diagramRef]);
 
-  const animateAlongPath = (points, progress) => {
-    const lengths = points.slice(1).map((point, index) => (
-      Math.hypot(point.x - points[index].x, point.y - points[index].y)
-    ));
-    const total = lengths.reduce((sum, length) => sum + length, 0);
+  // Paths change with layout, not animation frames.
+  const paths = useMemo(() => {
+    if (!geometry) return [];
+
+    return timeline.map(({ animation, busActivity }) => {
+      const points = createAnimationPath(animation.source, animation.destination, busActivity, animation.kind);
+      const lengths = points.slice(1).map((point, index) => (
+        Math.hypot(point.x - points[index].x, point.y - points[index].y)
+      ));
+
+      return {
+        points,
+        lengths,
+        total: lengths.reduce((sum, length) => sum + length, 0),
+        d: points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" "),
+      };
+    });
+  }, [geometry, timeline, createAnimationPath]);
+
+  const animateAlongPath = ({ points, lengths, total }, progress) => {
     let distance = total * progress;
 
     // Walk by distance so turning a corner does not change travel speed.
@@ -154,36 +139,26 @@ export function BusAnimation({
         return {
           x: points[index].x + (points[index + 1].x - points[index].x) * fraction,
           y: points[index].y + (points[index + 1].y - points[index].y) * fraction,
-          total,
         };
       }
 
       distance -= lengths[index];
     }
 
-    return { ...points[points.length - 1], total };
+    return points[points.length - 1];
   };
 
   useEffect(() => {
-    if (!geometry) return;
-
-    onPathLengths(timeline.map(({ animation, busActivity }) => {
-      const path = createAnimationPath(animation.source, animation.destination, busActivity, animation.kind);
-
-      return path.slice(1).reduce((length, point, index) => (
-        length + Math.hypot(point.x - path[index].x, point.y - path[index].y)
-      ), 0);
-    }));
-  }, [geometry, timeline, createAnimationPath, onPathLengths]);
+    if (paths.length) onPathLengths(paths.map(path => path.total));
+  }, [paths, onPathLengths]);
 
   const elapsed = progress * duration;
   const travel = Math.max(0, Math.min(1, (elapsed - 80) / (duration - 260)));
   const opacity = Math.min(1, elapsed / 80, (duration - elapsed) / 80);
-  const points = createAnimationPath(animation.source, animation.destination, busActivity, animation.kind);
-  const position = points ? animateAlongPath(points, travel) : null;
-
-  const path = points?.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
-  const color = { address: "#3b82f6", data: "#ef4444", control: "#22c55e" }[busActivity?.type] || "#8b5cf6";
+  const path = paths[stepIndex];
+  const position = path ? animateAlongPath(path, travel) : null;
+  const busStyle = busColors[busActivity?.type];
+  const color = busStyle?.stroke || "#8b5cf6";
 
   const connectorStyle = (name) => ({
     transform: "translateY(-100%)",
@@ -211,16 +186,16 @@ export function BusAnimation({
       {position && animationInProgress && (
         <div className="absolute inset-0 !m-0 z-30 pointer-events-none">
           <svg className="absolute inset-0 w-full h-full" aria-hidden="true">
-            <path d={path} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round"
-              opacity={opacity * 0.6} strokeDasharray={position.total}
-              strokeDashoffset={position.total * (1 - travel)} />
+            <path d={path.d} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round"
+              opacity={opacity * 0.6} strokeDasharray={path.total}
+              strokeDashoffset={path.total * (1 - travel)} />
             {animation.kind === "decode" && (
               <rect x={position.x} y={geometry.nodes[animation.source].top} width="3"
                 height={geometry.nodes[animation.source].height} fill={color} opacity={opacity * 0.5} />
             )}
           </svg>
           <div role="img" aria-label={busActivity ? `${busActivity.type} bus transfer` : `${animation.kind} animation`}
-            className={`absolute z-40 flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-white shadow-sm ${busActivity ? getBusColor(busActivity.type) : "bg-violet-500"}`}
+            className={`absolute z-40 flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-white shadow-sm ${busActivity ? (busStyle?.badge || "bg-gray-500") : "bg-violet-500"}`}
             style={{
               left: position.x,
               top: position.y,

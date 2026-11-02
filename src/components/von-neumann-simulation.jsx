@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "./ui/button";
 import { BusAnimation } from "./bus-animation";
 import { AnimatedValue } from "./animated-value";
@@ -9,19 +9,19 @@ import { getStepDescription } from "../utils/getStepDescription";
 import { getStepExplanation } from "../utils/getStepExplanation";
 
 
+const initialRam = [
+  "LOAD 5", // 0: Load address 5 value into ACC
+  "ADD 6", // 1: Add address 6 value to ACC
+  "STORE 7", // 2: Store ACC value to address 7
+  "HALT", // 3: Stop execution
+  "-", // 4: Empty
+  "10", // 5: Data: 10
+  "5", // 6: Data: 5
+  "0", // 7: Result will be stored here
+];
+
 export function VonNeumannSimulation({ isIB = false }) {
   const [isExecutingStep, setIsExecutingStep] = useState(false); // Track if a step is currently being executed
-
-  const initialRam = [
-    "LOAD 5", // 0: Load address 5 value into ACC
-    "ADD 6", // 1: Add address 6 value to ACC
-    "STORE 7", // 2: Store ACC value to address 7
-    "HALT", // 3: Stop execution
-    "-", // 4: Empty
-    "10", // 5: Data: 10
-    "5", // 6: Data: 5
-    "0", // 7: Result will be stored here
-  ];
 
   // Build snapshots once so scrubbing never applies an instruction twice.
   const [timeline] = useState(() => {
@@ -45,6 +45,12 @@ export function VonNeumannSimulation({ isIB = false }) {
     return steps;
   });
 
+  const busActivities = useMemo(() => [...new Map(
+    timeline
+      .filter(({ busActivity }) => busActivity)
+      .map(({ busActivity }) => [busActivity.purpose, busActivity]),
+  ).values()], [timeline]);
+
   const [timing, setTiming] = useState(() => ({
     position: 0,
     durations: timeline.map(() => 1000),
@@ -52,9 +58,11 @@ export function VonNeumannSimulation({ isIB = false }) {
 
   const timelinePosition = timing.position;
   const setTimelinePosition = (position) => setTiming(current => ({ ...current, position }));
-  const stepOffsets = [0];
-
-  timing.durations.forEach(duration => stepOffsets.push(stepOffsets.at(-1) + duration));
+  const stepOffsets = useMemo(() => {
+    const offsets = [0];
+    timing.durations.forEach(duration => offsets.push(offsets.at(-1) + duration));
+    return offsets;
+  }, [timing.durations]);
 
   const stepIndex = Math.min(
     stepOffsets.filter(offset => offset <= timelinePosition).length - 1,
@@ -63,12 +71,12 @@ export function VonNeumannSimulation({ isIB = false }) {
   const stepDuration = timing.durations[stepIndex];
   const stepProgress = (timelinePosition - stepOffsets[stepIndex]) / stepDuration;
   const step = timeline[stepIndex];
-  const simulation = step.state;
-  const { pc, mar, mdr, cir, acc, ram, currentStep } = simulation;
+  const { pc, mar, mdr, cir, acc, ram, currentStep } = step.state;
+  const stepDescription = getStepDescription(currentStep, isIB);
   const isHalted = stepProgress === 1 && step.nextState.isHalted;
   const { busActivity } = step;
   const activeElement = stepProgress === 0 ? null
-    : stepProgress < 0.5 ? step.sourceElement : step.activeElement;
+    : stepProgress < 0.5 ? step.animation.source : step.animation.destination;
   const playbackRef = useRef(null);
   const diagramRef = useRef(null);
 
@@ -114,8 +122,8 @@ export function VonNeumannSimulation({ isIB = false }) {
   // Keep a start and end snapshot for each step so dragging can reverse it.
   function getSimulationStep(state) {
     const { pc, mar, mdr, cir, acc, currentStep } = state;
-    const ram = [...state.ram];
-    const nextState = { ...state, ram };
+    const ram = state.ram;
+    const nextState = { ...state };
     let busActivity = null;
     let activeElement = null;
 
@@ -123,7 +131,6 @@ export function VonNeumannSimulation({ isIB = false }) {
       case "fetch-pc-to-mar":
         // PC to MAR
         nextState.mar = pc;
-        busActivity = null;
         activeElement = "mar";
         nextState.currentStep = "fetch-mar-to-ram";
         break;
@@ -157,7 +164,6 @@ export function VonNeumannSimulation({ isIB = false }) {
 
       case "fetch-mdr-to-cir":
         // MDR to CIR
-        busActivity = null;
         nextState.cir = mdr;
         activeElement = "cir";
         nextState.currentStep = "fetch-increment-pc";
@@ -165,7 +171,6 @@ export function VonNeumannSimulation({ isIB = false }) {
 
       case "fetch-increment-pc":
         // Increment PC
-        busActivity = null;
         nextState.pc = pc + 1;
         activeElement = "pc";
         nextState.currentStep = "decode";
@@ -173,7 +178,6 @@ export function VonNeumannSimulation({ isIB = false }) {
 
       case "decode":
         // Decode instruction
-        busActivity = null;
         activeElement = "cir";
         // Determine which execute step to go to based on the instruction
         if (cir?.startsWith("LOAD")) {
@@ -192,15 +196,13 @@ export function VonNeumannSimulation({ isIB = false }) {
         
         // First set MAR with the address
         nextState.mar = loadAddress;
-        busActivity = null;
         activeElement = "mar";
         
         nextState.currentStep = "execute-load-2";
         break;
       }
 
-      case "execute-load-2": {
-        const loadAddr = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-load-2":
         // Then fetch from RAM using address bus
         busActivity = {
           type: "address",
@@ -209,15 +211,13 @@ export function VonNeumannSimulation({ isIB = false }) {
           purpose:
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from.",
         };
-        activeElement = `ram-${loadAddr}`;
+        activeElement = `ram-${mar}`;
         nextState.currentStep = isIB ? "execute-load-read" : "execute-load-3";
         break;
-      }
 
-      case "execute-load-3": {
-        const loadAddr2 = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-load-3":
         // Then get data back via data bus
-        nextState.mdr = ram[loadAddr2];
+        nextState.mdr = ram[mar];
         busActivity = {
           type: "data",
           source: "ram",
@@ -229,12 +229,10 @@ export function VonNeumannSimulation({ isIB = false }) {
         
         nextState.currentStep = isIB ? "execute-load-control" : "execute-load-4";
         break;
-      }
 
-      case "execute-load-4": {
-        const loadAddr3 = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-load-4":
         // Finally update ACC
-        nextState.acc = Number.parseInt(ram[loadAddr3]);
+        nextState.acc = Number.parseInt(mdr);
         busActivity = isIB ? null : {
           type: "control",
           source: "registers",
@@ -247,22 +245,19 @@ export function VonNeumannSimulation({ isIB = false }) {
         // Go back to fetch cycle
         nextState.currentStep = "fetch-pc-to-mar";
         break;
-      }
 
       case "execute-add-1": {
         const addAddress = Number.parseInt(cir?.split(" ")[1] || "0");
         
         // First set MAR with the address
         nextState.mar = addAddress;
-        busActivity = null;
         activeElement = "mar";
         
         nextState.currentStep = "execute-add-2";
         break;
       }
 
-      case "execute-add-2": {
-        const addAddr = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-add-2":
         // Then fetch from RAM using address bus
         busActivity = {
           type: "address",
@@ -271,15 +266,13 @@ export function VonNeumannSimulation({ isIB = false }) {
           purpose:
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from for addition.",
         };
-        activeElement = `ram-${addAddr}`;
+        activeElement = `ram-${mar}`;
         nextState.currentStep = isIB ? "execute-add-read" : "execute-add-3";
         break;
-      }
 
-      case "execute-add-3": {
-        const addAddr2 = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-add-3":
         // Then get data back via data bus
-        nextState.mdr = ram[addAddr2];
+        nextState.mdr = ram[mar];
         busActivity = {
           type: "data",
           source: "ram",
@@ -291,13 +284,10 @@ export function VonNeumannSimulation({ isIB = false }) {
         
         nextState.currentStep = isIB ? "execute-add-control" : "execute-add-4";
         break;
-      }
 
-      case "execute-add-4": {
-        const addAddr3 = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-add-4":
         // Finally update ACC with addition
-        const newAcc = acc + Number.parseInt(ram[addAddr3]);
-        nextState.acc = newAcc;
+        nextState.acc = acc + Number.parseInt(mdr);
         busActivity = isIB ? null : {
           type: "control",
           source: "registers",
@@ -310,14 +300,12 @@ export function VonNeumannSimulation({ isIB = false }) {
         // Go back to fetch cycle
         nextState.currentStep = "fetch-pc-to-mar";
         break;
-      }
 
       case "execute-store-1": {
         const storeAddress = Number.parseInt(cir?.split(" ")[1] || "0");
         
         // First set MAR with the address
         nextState.mar = storeAddress;
-        busActivity = null;
         activeElement = "mar";
         
         nextState.currentStep = "execute-store-2";
@@ -327,14 +315,12 @@ export function VonNeumannSimulation({ isIB = false }) {
       case "execute-store-2":
         // Then set MDR with ACC value
         nextState.mdr = acc.toString();
-        busActivity = null;
         activeElement = "mdr";
         
         nextState.currentStep = "execute-store-3";
         break;
 
-      case "execute-store-3": {
-        const storeAddr = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-store-3":
         // Send address to RAM
         busActivity = {
           type: "address",
@@ -343,15 +329,13 @@ export function VonNeumannSimulation({ isIB = false }) {
           purpose:
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to write the data to.",
         };
-        activeElement = `ram-${storeAddr}`;
+        activeElement = `ram-${mar}`;
         nextState.currentStep = isIB ? "execute-store-write" : "execute-store-4";
         break;
-      }
 
-      case "execute-store-4": {
-        const storeAddr2 = Number.parseInt(cir?.split(" ")[1] || "0");
+      case "execute-store-4":
         // Send data to RAM
-        ram[storeAddr2] = acc.toString();
+        nextState.ram = ram.map((value, index) => index === mar ? mdr : value);
         busActivity = {
           type: "data",
           source: "registers",
@@ -362,7 +346,6 @@ export function VonNeumannSimulation({ isIB = false }) {
         // Go back to fetch cycle
         nextState.currentStep = "fetch-pc-to-mar";
         break;
-      }
 
       case "fetch-cu-read":
       case "execute-load-read":
@@ -399,7 +382,6 @@ export function VonNeumannSimulation({ isIB = false }) {
         break;
 
       case "execute-halt":
-        busActivity = null;
         nextState.isHalted = true;
         break;
     }
@@ -433,8 +415,6 @@ export function VonNeumannSimulation({ isIB = false }) {
     return {
       nextState,
       busActivity,
-      activeElement,
-      sourceElement,
       animation: { kind, source: sourceElement, destination: activeElement, value },
     };
   }
@@ -489,7 +469,7 @@ export function VonNeumannSimulation({ isIB = false }) {
         >
           {isIB ? "IGCSE" : "IB"}
         </a>
-        <div>{getCurrentCycleName(currentStep)} → {getStepDescription(currentStep, isIB)}</div>
+        <div>{getCurrentCycleName(currentStep)} → {stepDescription}</div>
       </div>
 
       <div className="bg-gray-100 p-4 rounded-b-lg text-gray-800">
@@ -656,19 +636,19 @@ export function VonNeumannSimulation({ isIB = false }) {
           {/* CPU Registers */}
           <div data-simulation-port="registers" className="bg-white p-[1.15rem] pt-3 flex flex-col justify-between items-center rounded-xl gap-1.5 z-20">
             <span className="font-bold text-black text-md leading-snug tracking-[0.02em] text-center w-full mb-1">Registers</span>
-            <div className={`flex flex-row w-full h-full ${activeElement === "pc" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("pc")}>
+            <div className="flex flex-row w-full h-full" style={activityStyle("pc")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">PC</span>
               <span data-simulation-node="pc" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
                 <AnimatedValue before={pc} after={step.nextState.pc} progress={stepProgress} duration={stepDuration} />
               </span>
             </div>
-            <div className={`flex flex-row w-full h-full ${activeElement === "mar" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("mar")}>
+            <div className="flex flex-row w-full h-full" style={activityStyle("mar")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">MAR</span>
               <span data-simulation-node="mar" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
                 <AnimatedValue before={mar} after={step.nextState.mar} progress={stepProgress} duration={stepDuration} />
               </span>
             </div>
-            <div className={`flex flex-row w-full h-full ${activeElement === "mdr" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("mdr")}>
+            <div className="flex flex-row w-full h-full" style={activityStyle("mdr")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">MDR</span>
               <span data-simulation-node="mdr" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
                 <AnimatedValue before={mdr} after={step.nextState.mdr} progress={stepProgress} duration={stepDuration} />
@@ -727,7 +707,7 @@ export function VonNeumannSimulation({ isIB = false }) {
             {ram.map((content, index) => (
               <div 
                 key={index} 
-                className={`flex flex-row w-full h-full ${activeElement === `ram-${index}` ? "ring-2 ring-yellow-400" : ""}`}
+                className="flex flex-row w-full h-full"
                 style={activityStyle(`ram-${index}`)}
               >
                 <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">{index}</span>
@@ -743,8 +723,7 @@ export function VonNeumannSimulation({ isIB = false }) {
 
       {/* Bus Animation Component */}
       <BusAnimation
-        busActivity={busActivity}
-        step={step}
+        stepIndex={stepIndex}
         progress={stepProgress}
         duration={stepDuration}
         diagramRef={diagramRef}
@@ -752,20 +731,26 @@ export function VonNeumannSimulation({ isIB = false }) {
         onPathLengths={onPathLengths}
       />
 
-      {/* Bus Purpose Display */}
-      {busActivity && (
-        <div className="flex items-center justify-center mb-4 -mt-6 text-sm">
-          <div className={`w-3 h-3 rounded-full mr-2 ${
-              busActivity.type === "address"
+      {/* Hidden statuses share one grid cell to reserve the tallest wrapped message. */}
+      <div className="grid mb-4 -mt-6 text-sm">
+        {busActivities.map(activity => (
+          <div
+            key={activity.purpose}
+            aria-hidden={busActivity?.purpose !== activity.purpose}
+            className={`col-start-1 row-start-1 flex items-center justify-center ${busActivity?.purpose === activity.purpose ? "" : "invisible"}`}
+          >
+            <div className={`w-3 h-3 rounded-full mr-2 ${
+              activity.type === "address"
                 ? "bg-blue-500"
-                : busActivity.type === "data"
+                : activity.type === "data"
                   ? "bg-red-500"
                   : "bg-green-500"
             }`}
-          ></div>
-          <p className="text-gray-700">{busActivity.purpose}</p>
-        </div>
-      )}
+            ></div>
+            <p className="text-gray-700">{activity.purpose}</p>
+          </div>
+        ))}
+      </div>
 
       <div className="relative h-8" style={{ "--timeline-progress": `${stepIndex / (timeline.length - 1) * 100}%` }}>
         <div className="pointer-events-none absolute inset-x-3.5 inset-y-1 rounded-full bg-linear-to-r from-[#3478f6] from-[percentage:var(--timeline-progress)] to-[#efefef] to-[percentage:var(--timeline-progress)]" aria-hidden="true">
@@ -789,7 +774,7 @@ export function VonNeumannSimulation({ isIB = false }) {
           value={stepIndex}
           onPointerDown={() => setIsExecutingStep(false)}
           onChange={scrubStep}
-          aria-valuetext={`Step ${stepIndex + 1} of ${timeline.length}, ${Math.round(stepProgress * 100)}%: ${getStepDescription(currentStep, isIB)}`}
+          aria-valuetext={`Step ${stepIndex + 1} of ${timeline.length}, ${Math.round(stepProgress * 100)}%: ${stepDescription}`}
           className="absolute inset-0 m-0 h-8 w-full cursor-pointer appearance-none bg-transparent
             [&::-webkit-slider-runnable-track]:h-6 [&::-webkit-slider-runnable-track]:bg-transparent
             [&::-moz-range-track]:h-6 [&::-moz-range-track]:bg-transparent
