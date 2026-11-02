@@ -1,7 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Bus } from "lucide-react";
 
-export function BusAnimation({ busActivity, step, progress, duration, diagramRef, timeline, onPathLengths }) {
+export function BusAnimation({
+  busActivity,
+  step,
+  progress,
+  duration,
+  diagramRef,
+  timeline,
+  onPathLengths,
+}) {
   const railRef = useRef(null);
   const [geometry, setGeometry] = useState(null);
   const animationInProgress = progress > 0 && progress < 1;
@@ -42,11 +50,13 @@ export function BusAnimation({ busActivity, step, progress, duration, diagramRef
   const createAnimationPath = useCallback((source, destination, activity, kind) => {
     const sourcePos = geometry?.nodes[source];
     const destPos = geometry?.nodes[destination];
+
     if (!sourcePos || !destPos) return null;
 
     if (activity && isBusMoving(activity.source, activity.destination)) {
       const from = getPosition(activity.source);
       const to = getPosition(activity.destination);
+
       return [
         sourcePos,
         { x: from.x, y: sourcePos.y },
@@ -57,40 +67,72 @@ export function BusAnimation({ busActivity, step, progress, duration, diagramRef
       ];
     }
     if (kind === "increment") {
-      return [{ x: sourcePos.x + 36, y: sourcePos.y - 20 }, { x: sourcePos.x + 36, y: sourcePos.y }, sourcePos];
+      return [
+        { x: sourcePos.x + 36, y: sourcePos.y - 20 },
+        { x: sourcePos.x + 36, y: sourcePos.y },
+        sourcePos,
+      ];
     }
+
     if (kind === "decode" || kind === "halt") {
-      return [{ x: sourcePos.left + 8, y: sourcePos.y }, { x: sourcePos.left + sourcePos.width - 8, y: sourcePos.y }];
+      return [
+        { x: sourcePos.left + 8, y: sourcePos.y },
+        { x: sourcePos.left + sourcePos.width - 8, y: sourcePos.y },
+      ];
     }
+
     const middleX = (sourcePos.x + destPos.x) / 2;
-    return [sourcePos, { x: middleX, y: sourcePos.y }, { x: middleX, y: destPos.y }, destPos];
+
+    return [
+      sourcePos,
+      { x: middleX, y: sourcePos.y },
+      { x: middleX, y: destPos.y },
+      destPos,
+    ];
   }, [geometry, getPosition, isBusMoving]);
 
   useEffect(() => {
     const diagram = diagramRef.current;
+
+    // Use diagram-relative coordinates so overlays stay aligned after resizing.
     const measure = () => {
       const bounds = diagram.getBoundingClientRect();
+
       const relativeBox = (element) => {
         const box = element.getBoundingClientRect();
-        return { x: box.left - bounds.left + box.width / 2, y: box.top - bounds.top + box.height / 2,
-          left: box.left - bounds.left, top: box.top - bounds.top, width: box.width, height: box.height };
+
+        return {
+          x: box.left - bounds.left + box.width / 2,
+          y: box.top - bounds.top + box.height / 2,
+          left: box.left - bounds.left,
+          top: box.top - bounds.top,
+          width: box.width,
+          height: box.height,
+        };
       };
+
       const nodes = Object.fromEntries([...diagram.querySelectorAll("[data-simulation-node]")]
         .map(element => [element.dataset.simulationNode, relativeBox(element)]));
+
       const ports = Object.fromEntries([...diagram.querySelectorAll("[data-simulation-port]")]
         .map(element => {
           const box = relativeBox(element);
+
           return [element.dataset.simulationPort, {
             x: element.dataset.simulationPort === "registers" ? box.left + box.width - 6 : box.x,
             y: box.top + box.height,
           }];
         }));
+
       setGeometry({ nodes, ports, rail: relativeBox(railRef.current) });
     };
+
     measure();
+
     const observer = new ResizeObserver(measure);
     observer.observe(diagram);
     window.addEventListener("resize", measure);
+
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", measure);
@@ -98,28 +140,39 @@ export function BusAnimation({ busActivity, step, progress, duration, diagramRef
   }, [diagramRef]);
 
   const animateAlongPath = (points, progress) => {
-    const lengths = points.slice(1).map((point, index) => Math.hypot(point.x - points[index].x, point.y - points[index].y));
+    const lengths = points.slice(1).map((point, index) => (
+      Math.hypot(point.x - points[index].x, point.y - points[index].y)
+    ));
     const total = lengths.reduce((sum, length) => sum + length, 0);
     let distance = total * progress;
+
+    // Walk by distance so turning a corner does not change travel speed.
     for (let index = 0; index < lengths.length; index++) {
       if (distance <= lengths[index]) {
         const fraction = lengths[index] ? distance / lengths[index] : 0;
+
         return {
           x: points[index].x + (points[index + 1].x - points[index].x) * fraction,
           y: points[index].y + (points[index + 1].y - points[index].y) * fraction,
           total,
         };
       }
+
       distance -= lengths[index];
     }
+
     return { ...points[points.length - 1], total };
   };
 
   useEffect(() => {
     if (!geometry) return;
+
     onPathLengths(timeline.map(({ animation, busActivity }) => {
       const path = createAnimationPath(animation.source, animation.destination, busActivity, animation.kind);
-      return path.slice(1).reduce((length, point, index) => length + Math.hypot(point.x - path[index].x, point.y - path[index].y), 0);
+
+      return path.slice(1).reduce((length, point, index) => (
+        length + Math.hypot(point.x - path[index].x, point.y - path[index].y)
+      ), 0);
     }));
   }, [geometry, timeline, createAnimationPath, onPathLengths]);
 
@@ -128,11 +181,17 @@ export function BusAnimation({ busActivity, step, progress, duration, diagramRef
   const opacity = Math.min(1, elapsed / 80, (duration - elapsed) / 80);
   const points = createAnimationPath(animation.source, animation.destination, busActivity, animation.kind);
   const position = points ? animateAlongPath(points, travel) : null;
+
   const path = points?.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
   const color = { address: "#3b82f6", data: "#ef4444", control: "#22c55e" }[busActivity?.type] || "#8b5cf6";
+
   const connectorStyle = (name) => ({
     transform: "translateY(-100%)",
-    ...(geometry && { left: geometry.ports[name].x - 6, top: 6, height: geometry.rail.y - geometry.ports[name].y }),
+    ...(geometry && {
+      left: geometry.ports[name].x - 6,
+      top: 6,
+      height: geometry.rail.y - geometry.ports[name].y,
+    }),
   });
 
   return (
@@ -162,8 +221,13 @@ export function BusAnimation({ busActivity, step, progress, duration, diagramRef
           </svg>
           <div role="img" aria-label={busActivity ? `${busActivity.type} bus transfer` : `${animation.kind} animation`}
             className={`absolute z-40 flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-white shadow-sm ${busActivity ? getBusColor(busActivity.type) : "bg-violet-500"}`}
-            style={{ left: position.x, top: position.y, opacity,
-              transform: `translate(-50%, -50%) scale(${0.85 + 0.15 * Math.sin(Math.PI * progress)})` }}>
+            style={{
+              left: position.x,
+              top: position.y,
+              opacity,
+              transform: `translate(-50%, -50%) scale(${0.85 + 0.15 * Math.sin(Math.PI * progress)})`,
+            }}
+          >
             {busActivity && <Bus size={18} color="white" />}
             <span>{animation.value}</span>
           </div>

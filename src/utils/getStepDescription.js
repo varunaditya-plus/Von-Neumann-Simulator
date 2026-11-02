@@ -1,4 +1,4 @@
-export function getStepDescription(currentStep) {
+function describeStep(currentStep) {
   switch (currentStep) {
     case "fetch-pc-to-mar":
       return "The Program Counter's value is copied to the Memory Address Register";
@@ -41,4 +41,29 @@ export function getStepDescription(currentStep) {
     default:
       return "";
   }
+}
+
+export function getStepDescription(currentStep, isIB = false) {
+  if (isIB) {
+    const descriptions = {
+      "fetch-cu-read": "The CU sends a READ signal to RAM",
+      "execute-load-read": "The CU requests the data using a READ signal",
+      "execute-add-read": "The CU requests the operand using a READ signal",
+      "execute-store-write": "The CU sends a WRITE signal to RAM",
+      "execute-load-control": "The CU selects the load operation in the ALU",
+      "execute-add-control": "The CU selects the addition operation in the ALU",
+      "fetch-increment-pc": "The PC advances to the next instruction address",
+      "decode": "The CU decodes the opcode and operand in IR",
+      "execute-load-4": "The operand moves from MDR into AC",
+      "execute-add-4": "The ALU adds the operand in MDR to AC",
+    };
+
+    if (descriptions[currentStep]) return descriptions[currentStep];
+  }
+
+  const description = describeStep(currentStep);
+
+  return isIB
+    ? description.replaceAll("Current Instruction Register", "Instruction Register")
+    : description;
 }

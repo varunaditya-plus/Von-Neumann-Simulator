@@ -9,7 +9,7 @@ import { getStepDescription } from "../utils/getStepDescription";
 import { getStepExplanation } from "../utils/getStepExplanation";
 
 
-export function VonNeumannSimulation() {
+export function VonNeumannSimulation({ isIB = false }) {
   const [isExecutingStep, setIsExecutingStep] = useState(false); // Track if a step is currently being executed
 
   const initialRam = [
@@ -23,10 +23,20 @@ export function VonNeumannSimulation() {
     "0", // 7: Result will be stored here
   ];
 
+  // Build snapshots once so scrubbing never applies an instruction twice.
   const [timeline] = useState(() => {
     const steps = [];
-    let state = { pc: 0, mar: null, mdr: null, cir: null, acc: 0,
-      currentStep: "fetch-pc-to-mar", isHalted: false, ram: initialRam };
+    let state = {
+      pc: 0,
+      mar: null,
+      mdr: null,
+      cir: null,
+      acc: 0,
+      currentStep: "fetch-pc-to-mar",
+      isHalted: false,
+      ram: initialRam,
+    };
+
     while (!state.isHalted) {
       const step = getSimulationStep(state);
       steps.push({ state, ...step });
@@ -34,13 +44,22 @@ export function VonNeumannSimulation() {
     }
     return steps;
   });
-  const [timing, setTiming] = useState(() => ({ position: 0, durations: timeline.map(() => 1000) }));
+
+  const [timing, setTiming] = useState(() => ({
+    position: 0,
+    durations: timeline.map(() => 1000),
+  }));
+
   const timelinePosition = timing.position;
   const setTimelinePosition = (position) => setTiming(current => ({ ...current, position }));
   const stepOffsets = [0];
+
   timing.durations.forEach(duration => stepOffsets.push(stepOffsets.at(-1) + duration));
-  const timelineEnd = stepOffsets.at(-1);
-  const stepIndex = Math.min(stepOffsets.filter(offset => offset <= timelinePosition).length - 1, timeline.length - 1);
+
+  const stepIndex = Math.min(
+    stepOffsets.filter(offset => offset <= timelinePosition).length - 1,
+    timeline.length - 1,
+  );
   const stepDuration = timing.durations[stepIndex];
   const stepProgress = (timelinePosition - stepOffsets[stepIndex]) / stepDuration;
   const step = timeline[stepIndex];
@@ -63,20 +82,29 @@ export function VonNeumannSimulation() {
   const onPathLengths = useCallback((lengths) => {
     // 350 pixels per second, with the same 80 ms lead-in and 180 ms arrival for every step.
     const durations = lengths.map(length => Math.round(260 + length / 350 * 1000));
+
     setTiming(current => {
       if (durations.every((duration, index) => duration === current.durations[index])) return current;
+
+      // Preserve the step and its progress when a resize changes path lengths.
       let index = 0;
       let remaining = current.position;
+
       while (index < current.durations.length - 1 && remaining >= current.durations[index]) {
         remaining -= current.durations[index++];
       }
+
       const progress = remaining / current.durations[index];
-      const position = durations.slice(0, index).reduce((sum, duration) => sum + duration, 0) + progress * durations[index];
+      const position = durations.slice(0, index).reduce((sum, duration) => sum + duration, 0)
+        + progress * durations[index];
+
       return { position, durations };
     });
   }, []);
 
-  useEffect(() => { setIsExecutingStep(false); }, [timing.durations]);
+  useEffect(() => {
+    setIsExecutingStep(false);
+  }, [timing.durations]);
 
   const resetSimulation = () => {
     setTimelinePosition(0);
@@ -110,7 +138,7 @@ export function VonNeumannSimulation() {
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read from.",
         };
         activeElement = `ram-${mar}`;
-        nextState.currentStep = "fetch-ram-to-mdr";
+        nextState.currentStep = isIB ? "fetch-cu-read" : "fetch-ram-to-mdr";
         break;
 
       case "fetch-ram-to-mdr":
@@ -182,7 +210,7 @@ export function VonNeumannSimulation() {
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from.",
         };
         activeElement = `ram-${loadAddr}`;
-        nextState.currentStep = "execute-load-3";
+        nextState.currentStep = isIB ? "execute-load-read" : "execute-load-3";
         break;
       }
 
@@ -199,7 +227,7 @@ export function VonNeumannSimulation() {
         };
         activeElement = "mdr";
         
-        nextState.currentStep = "execute-load-4";
+        nextState.currentStep = isIB ? "execute-load-control" : "execute-load-4";
         break;
       }
 
@@ -207,7 +235,7 @@ export function VonNeumannSimulation() {
         const loadAddr3 = Number.parseInt(cir?.split(" ")[1] || "0");
         // Finally update ACC
         nextState.acc = Number.parseInt(ram[loadAddr3]);
-        busActivity = {
+        busActivity = isIB ? null : {
           type: "control",
           source: "registers",
           destination: "alu",
@@ -244,7 +272,7 @@ export function VonNeumannSimulation() {
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from for addition.",
         };
         activeElement = `ram-${addAddr}`;
-        nextState.currentStep = "execute-add-3";
+        nextState.currentStep = isIB ? "execute-add-read" : "execute-add-3";
         break;
       }
 
@@ -261,7 +289,7 @@ export function VonNeumannSimulation() {
         };
         activeElement = "mdr";
         
-        nextState.currentStep = "execute-add-4";
+        nextState.currentStep = isIB ? "execute-add-control" : "execute-add-4";
         break;
       }
 
@@ -270,7 +298,7 @@ export function VonNeumannSimulation() {
         // Finally update ACC with addition
         const newAcc = acc + Number.parseInt(ram[addAddr3]);
         nextState.acc = newAcc;
-        busActivity = {
+        busActivity = isIB ? null : {
           type: "control",
           source: "registers",
           destination: "alu",
@@ -316,7 +344,7 @@ export function VonNeumannSimulation() {
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to write the data to.",
         };
         activeElement = `ram-${storeAddr}`;
-        nextState.currentStep = "execute-store-4";
+        nextState.currentStep = isIB ? "execute-store-write" : "execute-store-4";
         break;
       }
 
@@ -336,6 +364,40 @@ export function VonNeumannSimulation() {
         break;
       }
 
+      case "fetch-cu-read":
+      case "execute-load-read":
+      case "execute-add-read":
+      case "execute-store-write": {
+        const writing = currentStep === "execute-store-write";
+
+        busActivity = {
+          type: "control",
+          source: "cu",
+          destination: "ram",
+          signal: writing ? "WRITE" : "READ",
+          purpose: writing
+            ? "The CU sends a WRITE signal on the control bus. RAM stores the data arriving on the data bus at the address supplied by MAR."
+            : "The CU sends a READ signal on the control bus. RAM returns the contents of the address supplied by MAR on the data bus.",
+        };
+        activeElement = `ram-${mar}`;
+        nextState.currentStep = currentStep === "fetch-cu-read" ? "fetch-ram-to-mdr"
+          : writing ? "execute-store-4" : currentStep.replace("-read", "-3");
+        break;
+      }
+
+      case "execute-load-control":
+      case "execute-add-control":
+        busActivity = {
+          type: "control",
+          source: "cu",
+          destination: "alu",
+          signal: cir.split(" ")[0],
+          purpose: "The CU sends control signals to the ALU to select the operation. The operand is transferred separately from MDR; it is not carried by the control bus.",
+        };
+        activeElement = "acc";
+        nextState.currentStep = currentStep.replace("-control", "-4");
+        break;
+
       case "execute-halt":
         busActivity = null;
         nextState.isHalted = true;
@@ -345,101 +407,95 @@ export function VonNeumannSimulation() {
     const kind = currentStep === "fetch-increment-pc" ? "increment"
       : currentStep === "decode" ? "decode"
       : currentStep === "execute-halt" ? "halt" : "transfer";
+
     if (!activeElement) activeElement = busActivity?.destination === "ram" ? `ram-${mar}` : "cir";
-    const sourceElement = busActivity ? (busActivity.source === "ram" ? `ram-${mar}`
-      : busActivity.type === "address" ? "mar" : "mdr")
+
+    // Control signals start in the CU; operand values travel separately from MDR.
+    const sourceElement = busActivity
+      ? (busActivity.source === "ram" ? `ram-${mar}`
+        : busActivity.source === "cu" ? "cir"
+        : busActivity.type === "address" ? "mar" : "mdr")
       : currentStep === "fetch-pc-to-mar" ? "pc"
-      : currentStep === "fetch-mdr-to-cir" ? "mdr"
+      : currentStep === "fetch-mdr-to-cir" || currentStep === "execute-load-4" || currentStep === "execute-add-4" ? "mdr"
       : currentStep === "execute-store-2" ? "acc"
       : currentStep.endsWith("-1") ? "cir" : activeElement;
+
     let value = nextState[activeElement];
+
     if (busActivity?.type === "address") value = mar;
     else if (busActivity?.type === "data") value = busActivity.source === "ram" ? nextState.mdr : mdr;
-    else if (busActivity?.type === "control") value = currentStep === "execute-add-4" ? "ADD" : "LOAD";
+    else if (busActivity?.type === "control") value = busActivity.signal || (currentStep === "execute-add-4" ? "ADD" : "LOAD");
     else if (kind === "increment") value = "+1";
     else if (kind === "decode") value = cir?.split(" ")[0];
     else if (kind === "halt") value = "HALT";
-    return { nextState, busActivity, activeElement, sourceElement,
-      animation: { kind, source: sourceElement, destination: activeElement, value } };
+    else if (isIB && (currentStep === "execute-load-4" || currentStep === "execute-add-4")) value = mdr;
+
+    return {
+      nextState,
+      busActivity,
+      activeElement,
+      sourceElement,
+      animation: { kind, source: sourceElement, destination: activeElement, value },
+    };
   }
 
   const nextStep = () => {
     if (isHalted || isExecutingStep) return;
+
     playbackRef.current = {
       from: timelinePosition,
       target: stepOffsets[stepIndex + 1],
       startedAt: performance.now(),
     };
+
     setIsExecutingStep(true);
   };
 
   const scrubStep = (event) => {
     setIsExecutingStep(false);
-    setTimelinePosition(Number(event.currentTarget.value));
+    // Each slider stop selects the start snapshot of one step.
+    setTimelinePosition(stepOffsets[Number(event.currentTarget.value)]);
   };
 
   useEffect(() => {
     if (!isExecutingStep) return;
+
     const { from, target, startedAt } = playbackRef.current;
     let frame;
+
     const tick = (now) => {
       const position = Math.min(target, from + (now - startedAt));
       setTimelinePosition(position);
+
       if (position === target) {
         setIsExecutingStep(false);
       } else {
         frame = requestAnimationFrame(tick);
       }
     };
+
     frame = requestAnimationFrame(tick);
+
     return () => cancelAnimationFrame(frame);
   }, [isExecutingStep]);
 
   return (
     <div ref={diagramRef} className="relative space-y-6 mt-8">
-      <div className="bg-[#eaecf0] text-gray-950 p-4 rounded-t-lg text-center text-xl !mb-0">
-        <div>{getCurrentCycleName(currentStep)} → {getStepDescription(currentStep)}</div>
+      <div className="relative bg-[#eaecf0] text-gray-950 p-4 rounded-t-lg text-center text-xl !mb-0">
+        <a
+          href={isIB ? "/" : "/ib"}
+          aria-label={isIB ? "Switch to IGCSE" : "Switch to IB"}
+          className="absolute bottom-full right-0 z-50 mb-1 origin-bottom-right text-xs text-blue-600 underline transition-transform duration-200 ease-in-out hover:scale-110 hover:rotate-[5deg]"
+        >
+          {isIB ? "IGCSE" : "IB"}
+        </a>
+        <div>{getCurrentCycleName(currentStep)} → {getStepDescription(currentStep, isIB)}</div>
       </div>
 
       <div className="bg-gray-100 p-4 rounded-b-lg text-gray-800">
-        <p>{getStepExplanation(currentStep)}</p>
+        <p>{getStepExplanation(currentStep, isIB)}</p>
       </div>
 
-      <div className="relative h-8" style={{ "--timeline-progress": `${timelinePosition / timelineEnd * 100}%` }}>
-        <div className="pointer-events-none absolute inset-x-3.5 inset-y-1 rounded-full bg-linear-to-r from-[#3478f6] from-[percentage:var(--timeline-progress)] to-[#efefef] to-[percentage:var(--timeline-progress)]" aria-hidden="true">
-          {timeline.map((entry, index) => (
-            <span
-              key={index}
-              className={`absolute top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full ${timelinePosition >= stepOffsets[index] + timing.durations[index] / 2 ? "bg-white/40" : "bg-[#a0a0a0]"}`}
-              style={{
-                left: `${(stepOffsets[index] + timing.durations[index] / 2) / timelineEnd * 100}%`,
-              }}
-            />
-          ))}
-        </div>
-        <input
-          id="step-progress"
-          aria-label="Simulation progress"
-          type="range"
-          min="0"
-          max={timelineEnd}
-          step="1"
-          value={Math.round(timelinePosition)}
-          onPointerDown={() => setIsExecutingStep(false)}
-          onChange={scrubStep}
-          aria-valuetext={`Step ${stepIndex + 1} of ${timeline.length}, ${Math.round(stepProgress * 100)}%: ${getStepDescription(currentStep)}`}
-          className="absolute inset-0 m-0 h-8 w-full cursor-pointer appearance-none bg-transparent
-            [&::-webkit-slider-runnable-track]:h-6 [&::-webkit-slider-runnable-track]:bg-transparent
-            [&::-moz-range-track]:h-6 [&::-moz-range-track]:bg-transparent
-            [&::-webkit-slider-thumb]:-mt-0.5 [&::-webkit-slider-thumb]:size-7
-            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full
-            [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-[#dedede] [&::-webkit-slider-thumb]:bg-white
-            [&::-moz-range-thumb]:size-7 [&::-moz-range-thumb]:rounded-full
-            [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-[#dedede] [&::-moz-range-thumb]:bg-white
-            focus-visible:rounded-full focus-visible:outline-2 focus-visible:outline-solid
-            focus-visible:outline-[#3478f6] focus-visible:outline-offset-[3px]"
-        />
-      </div>
 
       <div className="flex justify-center space-x-4 mt-6">
         <Button 
@@ -555,10 +611,10 @@ export function VonNeumannSimulation() {
               <div className="space-y-2">
                 <div className="flex items-center">
                   <div className="w-6 h-6 rounded-full bg-cyan-500 mr-2"></div>
-                  <h3 className="font-bold">Current Instruction Register (CIR)</h3>
+                  <h3 className="font-bold">{isIB ? "Instruction Register (IR)" : "Current Instruction Register (CIR)"}</h3>
                 </div>
                 <p className="text-gray-700 pl-8">
-                  The CIR holds the instruction currently being executed. After an instruction is fetched from memory, 
+                  The {isIB ? "IR" : "CIR"} holds the instruction currently being executed. After an instruction is fetched from memory,
                   it is stored here while being decoded and executed by the control unit.
                 </p>
               </div>
@@ -566,7 +622,7 @@ export function VonNeumannSimulation() {
               <div className="space-y-2">
                 <div className="flex items-center">
                   <div className="w-6 h-6 rounded-full bg-yellow-500 mr-2"></div>
-                  <h3 className="font-bold">Accumulator (ACC)</h3>
+                  <h3 className="font-bold">Accumulator ({isIB ? "AC" : "ACC"})</h3>
                 </div>
                 <p className="text-gray-700 pl-8">
                   The Accumulator is a special register in the ALU that holds the results of arithmetic and logical operations. 
@@ -602,7 +658,9 @@ export function VonNeumannSimulation() {
             <span className="font-bold text-black text-md leading-snug tracking-[0.02em] text-center w-full mb-1">Registers</span>
             <div className={`flex flex-row w-full h-full ${activeElement === "pc" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("pc")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">PC</span>
-              <span data-simulation-node="pc" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm"><AnimatedValue before={pc} after={step.nextState.pc} progress={stepProgress} duration={stepDuration} /></span>
+              <span data-simulation-node="pc" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
+                <AnimatedValue before={pc} after={step.nextState.pc} progress={stepProgress} duration={stepDuration} />
+              </span>
             </div>
             <div className={`flex flex-row w-full h-full ${activeElement === "mar" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("mar")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">MAR</span>
@@ -625,7 +683,7 @@ export function VonNeumannSimulation() {
             }`}>
               <span className="font-bold text-white text-md leading-snug tracking-[0.02em] text-center w-full">Control Unit</span>
               <div className="flex flex-col w-full h-full">
-                <span className="bg-[#FFC15E] text-[#382600] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">CIR</span>
+                <span className="bg-[#FFC15E] text-[#382600] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">{isIB ? "IR" : "CIR"}</span>
                 <span data-simulation-node="cir" className="bg-[#E6E6E6] w-full h-8 py-1 px-2 flex items-center justify-start text-sm">
                   <AnimatedValue before={cir} after={step.nextState.cir} progress={stepProgress} duration={stepDuration} />
                 </span>
@@ -638,8 +696,10 @@ export function VonNeumannSimulation() {
             }`}>
               <span className="font-bold text-white text-md leading-snug tracking-[0.02em] text-left w-full">ALU</span>
               <div className="flex flex-col w-full h-full">
-                <span className="bg-[#4691E0] text-[#001938] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">ACC</span>
-                <span data-simulation-node="acc" className="bg-[#2C2E32] text-white w-full h-8 py-1 px-2 flex items-center justify-start text-sm"><AnimatedValue before={acc} after={step.nextState.acc} progress={stepProgress} duration={stepDuration} /></span>
+                <span className="bg-[#4691E0] text-[#001938] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">{isIB ? "AC" : "ACC"}</span>
+                <span data-simulation-node="acc" className="bg-[#2C2E32] text-white w-full h-8 py-1 px-2 flex items-center justify-start text-sm">
+                  <AnimatedValue before={acc} after={step.nextState.acc} progress={stepProgress} duration={stepDuration} />
+                </span>
               </div>
             </div>
           </div>
@@ -682,7 +742,15 @@ export function VonNeumannSimulation() {
       </div>
 
       {/* Bus Animation Component */}
-      <BusAnimation busActivity={busActivity} step={step} progress={stepProgress} duration={stepDuration} diagramRef={diagramRef} timeline={timeline} onPathLengths={onPathLengths} />
+      <BusAnimation
+        busActivity={busActivity}
+        step={step}
+        progress={stepProgress}
+        duration={stepDuration}
+        diagramRef={diagramRef}
+        timeline={timeline}
+        onPathLengths={onPathLengths}
+      />
 
       {/* Bus Purpose Display */}
       {busActivity && (
@@ -698,6 +766,43 @@ export function VonNeumannSimulation() {
           <p className="text-gray-700">{busActivity.purpose}</p>
         </div>
       )}
+
+      <div className="relative h-8" style={{ "--timeline-progress": `${stepIndex / (timeline.length - 1) * 100}%` }}>
+        <div className="pointer-events-none absolute inset-x-3.5 inset-y-1 rounded-full bg-linear-to-r from-[#3478f6] from-[percentage:var(--timeline-progress)] to-[#efefef] to-[percentage:var(--timeline-progress)]" aria-hidden="true">
+          {timeline.map((entry, index) => (
+            <span
+              key={index}
+              className={`absolute top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full ${index <= stepIndex ? "bg-white/40" : "bg-[#a0a0a0]"}`}
+              style={{
+                left: `${index / (timeline.length - 1) * 100}%`,
+              }}
+            />
+          ))}
+        </div>
+        <input
+          id="step-progress"
+          aria-label="Simulation progress"
+          type="range"
+          min="0"
+          max={timeline.length - 1}
+          step="1"
+          value={stepIndex}
+          onPointerDown={() => setIsExecutingStep(false)}
+          onChange={scrubStep}
+          aria-valuetext={`Step ${stepIndex + 1} of ${timeline.length}, ${Math.round(stepProgress * 100)}%: ${getStepDescription(currentStep, isIB)}`}
+          className="absolute inset-0 m-0 h-8 w-full cursor-pointer appearance-none bg-transparent
+            [&::-webkit-slider-runnable-track]:h-6 [&::-webkit-slider-runnable-track]:bg-transparent
+            [&::-moz-range-track]:h-6 [&::-moz-range-track]:bg-transparent
+            [&::-webkit-slider-thumb]:-mt-0.5 [&::-webkit-slider-thumb]:size-7
+            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full
+            [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-[#dedede] [&::-webkit-slider-thumb]:bg-white
+            [&::-moz-range-thumb]:size-7 [&::-moz-range-thumb]:rounded-full
+            [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-[#dedede] [&::-moz-range-thumb]:bg-white
+            focus-visible:rounded-full focus-visible:outline-2 focus-visible:outline-solid
+            focus-visible:outline-[#3478f6] focus-visible:outline-offset-[3px]"
+        />
+      </div>
+
     </div>
   );
 }
