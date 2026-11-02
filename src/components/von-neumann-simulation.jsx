@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
 import { BusAnimation } from "./bus-animation";
 import { AnimatedValue } from "./animated-value";
@@ -10,7 +10,6 @@ import { getStepExplanation } from "../utils/getStepExplanation";
 
 
 export function VonNeumannSimulation() {
-  const [timelinePosition, setTimelinePosition] = useState(0);
   const [isExecutingStep, setIsExecutingStep] = useState(false); // Track if a step is currently being executed
 
   const initialRam = [
@@ -35,9 +34,15 @@ export function VonNeumannSimulation() {
     }
     return steps;
   });
-  const timelineEnd = timeline.length * 1000;
-  const stepIndex = Math.min(Math.floor(timelinePosition / 1000), timeline.length - 1);
-  const stepProgress = (timelinePosition - stepIndex * 1000) / 1000;
+  const [timing, setTiming] = useState(() => ({ position: 0, durations: timeline.map(() => 1000) }));
+  const timelinePosition = timing.position;
+  const setTimelinePosition = (position) => setTiming(current => ({ ...current, position }));
+  const stepOffsets = [0];
+  timing.durations.forEach(duration => stepOffsets.push(stepOffsets.at(-1) + duration));
+  const timelineEnd = stepOffsets.at(-1);
+  const stepIndex = Math.min(stepOffsets.filter(offset => offset <= timelinePosition).length - 1, timeline.length - 1);
+  const stepDuration = timing.durations[stepIndex];
+  const stepProgress = (timelinePosition - stepOffsets[stepIndex]) / stepDuration;
   const step = timeline[stepIndex];
   const simulation = step.state;
   const { pc, mar, mdr, cir, acc, ram, currentStep } = simulation;
@@ -54,6 +59,24 @@ export function VonNeumannSimulation() {
     const intensity = Math.max(source, destination);
     return { boxShadow: `0 0 0 ${3 * intensity}px rgba(250, 204, 21, ${intensity})` };
   };
+
+  const onPathLengths = useCallback((lengths) => {
+    // 350 pixels per second, with the same 80 ms lead-in and 180 ms arrival for every step.
+    const durations = lengths.map(length => Math.round(260 + length / 350 * 1000));
+    setTiming(current => {
+      if (durations.every((duration, index) => duration === current.durations[index])) return current;
+      let index = 0;
+      let remaining = current.position;
+      while (index < current.durations.length - 1 && remaining >= current.durations[index]) {
+        remaining -= current.durations[index++];
+      }
+      const progress = remaining / current.durations[index];
+      const position = durations.slice(0, index).reduce((sum, duration) => sum + duration, 0) + progress * durations[index];
+      return { position, durations };
+    });
+  }, []);
+
+  useEffect(() => { setIsExecutingStep(false); }, [timing.durations]);
 
   const resetSimulation = () => {
     setTimelinePosition(0);
@@ -337,16 +360,14 @@ export function VonNeumannSimulation() {
     else if (kind === "decode") value = cir?.split(" ")[0];
     else if (kind === "halt") value = "HALT";
     return { nextState, busActivity, activeElement, sourceElement,
-      animation: { kind, source: sourceElement, destination: activeElement, value },
-      duration: currentStep === "fetch-pc-to-mar" ? 2000 : 1000 };
+      animation: { kind, source: sourceElement, destination: activeElement, value } };
   }
 
   const nextStep = () => {
     if (isHalted || isExecutingStep) return;
     playbackRef.current = {
       from: timelinePosition,
-      target: (stepIndex + 1) * 1000,
-      duration: step.duration,
+      target: stepOffsets[stepIndex + 1],
       startedAt: performance.now(),
     };
     setIsExecutingStep(true);
@@ -359,10 +380,10 @@ export function VonNeumannSimulation() {
 
   useEffect(() => {
     if (!isExecutingStep) return;
-    const { from, target, duration, startedAt } = playbackRef.current;
+    const { from, target, startedAt } = playbackRef.current;
     let frame;
     const tick = (now) => {
-      const position = Math.min(target, from + (now - startedAt) / duration * 1000);
+      const position = Math.min(target, from + (now - startedAt));
       setTimelinePosition(position);
       if (position === target) {
         setIsExecutingStep(false);
@@ -384,15 +405,14 @@ export function VonNeumannSimulation() {
         <p>{getStepExplanation(currentStep)}</p>
       </div>
 
-      <div className="simulation-timeline" style={{ "--timeline-progress": `${timelinePosition / timelineEnd * 100}%` }}>
-        <div className="simulation-timeline-track" aria-hidden="true">
+      <div className="relative h-8" style={{ "--timeline-progress": `${timelinePosition / timelineEnd * 100}%` }}>
+        <div className="pointer-events-none absolute inset-x-3.5 inset-y-1 rounded-full bg-linear-to-r from-[#3478f6] from-[percentage:var(--timeline-progress)] to-[#efefef] to-[percentage:var(--timeline-progress)]" aria-hidden="true">
           {timeline.map((entry, index) => (
             <span
               key={index}
-              className="simulation-timeline-dot"
+              className={`absolute top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full ${timelinePosition >= stepOffsets[index] + timing.durations[index] / 2 ? "bg-white/40" : "bg-[#a0a0a0]"}`}
               style={{
-                left: `${(index + 0.5) / timeline.length * 100}%`,
-                background: timelinePosition >= (index + 0.5) * 1000 ? "#ffffff66" : undefined,
+                left: `${(stepOffsets[index] + timing.durations[index] / 2) / timelineEnd * 100}%`,
               }}
             />
           ))}
@@ -408,7 +428,16 @@ export function VonNeumannSimulation() {
           onPointerDown={() => setIsExecutingStep(false)}
           onChange={scrubStep}
           aria-valuetext={`Step ${stepIndex + 1} of ${timeline.length}, ${Math.round(stepProgress * 100)}%: ${getStepDescription(currentStep)}`}
-          className="simulation-timeline-input"
+          className="absolute inset-0 m-0 h-8 w-full cursor-pointer appearance-none bg-transparent
+            [&::-webkit-slider-runnable-track]:h-6 [&::-webkit-slider-runnable-track]:bg-transparent
+            [&::-moz-range-track]:h-6 [&::-moz-range-track]:bg-transparent
+            [&::-webkit-slider-thumb]:-mt-0.5 [&::-webkit-slider-thumb]:size-7
+            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full
+            [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-[#dedede] [&::-webkit-slider-thumb]:bg-white
+            [&::-moz-range-thumb]:size-7 [&::-moz-range-thumb]:rounded-full
+            [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-[#dedede] [&::-moz-range-thumb]:bg-white
+            focus-visible:rounded-full focus-visible:outline-2 focus-visible:outline-solid
+            focus-visible:outline-[#3478f6] focus-visible:outline-offset-[3px]"
         />
       </div>
 
@@ -573,18 +602,18 @@ export function VonNeumannSimulation() {
             <span className="font-bold text-black text-md leading-snug tracking-[0.02em] text-center w-full mb-1">Registers</span>
             <div className={`flex flex-row w-full h-full ${activeElement === "pc" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("pc")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">PC</span>
-              <span data-simulation-node="pc" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm"><AnimatedValue before={pc} after={step.nextState.pc} progress={stepProgress} /></span>
+              <span data-simulation-node="pc" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm"><AnimatedValue before={pc} after={step.nextState.pc} progress={stepProgress} duration={stepDuration} /></span>
             </div>
             <div className={`flex flex-row w-full h-full ${activeElement === "mar" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("mar")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">MAR</span>
               <span data-simulation-node="mar" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
-                <AnimatedValue before={mar} after={step.nextState.mar} progress={stepProgress} />
+                <AnimatedValue before={mar} after={step.nextState.mar} progress={stepProgress} duration={stepDuration} />
               </span>
             </div>
             <div className={`flex flex-row w-full h-full ${activeElement === "mdr" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("mdr")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">MDR</span>
               <span data-simulation-node="mdr" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
-                <AnimatedValue before={mdr} after={step.nextState.mdr} progress={stepProgress} />
+                <AnimatedValue before={mdr} after={step.nextState.mdr} progress={stepProgress} duration={stepDuration} />
               </span>
             </div>
           </div>
@@ -598,7 +627,7 @@ export function VonNeumannSimulation() {
               <div className="flex flex-col w-full h-full">
                 <span className="bg-[#FFC15E] text-[#382600] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">CIR</span>
                 <span data-simulation-node="cir" className="bg-[#E6E6E6] w-full h-8 py-1 px-2 flex items-center justify-start text-sm">
-                  <AnimatedValue before={cir} after={step.nextState.cir} progress={stepProgress} />
+                  <AnimatedValue before={cir} after={step.nextState.cir} progress={stepProgress} duration={stepDuration} />
                 </span>
               </div>
             </div>
@@ -610,7 +639,7 @@ export function VonNeumannSimulation() {
               <span className="font-bold text-white text-md leading-snug tracking-[0.02em] text-left w-full">ALU</span>
               <div className="flex flex-col w-full h-full">
                 <span className="bg-[#4691E0] text-[#001938] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">ACC</span>
-                <span data-simulation-node="acc" className="bg-[#2C2E32] text-white w-full h-8 py-1 px-2 flex items-center justify-start text-sm"><AnimatedValue before={acc} after={step.nextState.acc} progress={stepProgress} /></span>
+                <span data-simulation-node="acc" className="bg-[#2C2E32] text-white w-full h-8 py-1 px-2 flex items-center justify-start text-sm"><AnimatedValue before={acc} after={step.nextState.acc} progress={stepProgress} duration={stepDuration} /></span>
               </div>
             </div>
           </div>
@@ -643,7 +672,7 @@ export function VonNeumannSimulation() {
               >
                 <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">{index}</span>
                 <span data-simulation-node={`ram-${index}`} className="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm">
-                  <AnimatedValue before={content} after={step.nextState.ram[index]} progress={stepProgress} />
+                  <AnimatedValue before={content} after={step.nextState.ram[index]} progress={stepProgress} duration={stepDuration} />
                 </span>
               </div>
             ))}
@@ -653,7 +682,7 @@ export function VonNeumannSimulation() {
       </div>
 
       {/* Bus Animation Component */}
-      <BusAnimation busActivity={busActivity} step={step} progress={stepProgress} diagramRef={diagramRef} />
+      <BusAnimation busActivity={busActivity} step={step} progress={stepProgress} duration={stepDuration} diagramRef={diagramRef} timeline={timeline} onPathLengths={onPathLengths} />
 
       {/* Bus Purpose Display */}
       {busActivity && (

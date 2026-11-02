@@ -1,14 +1,14 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Bus } from "lucide-react";
 
-export function BusAnimation({ busActivity, step, progress, diagramRef }) {
+export function BusAnimation({ busActivity, step, progress, duration, diagramRef, timeline, onPathLengths }) {
   const railRef = useRef(null);
   const [geometry, setGeometry] = useState(null);
   const animationInProgress = progress > 0 && progress < 1;
   const { animation } = step;
 
   // Get position based on component name
-  const getPosition = (component) => {
+  const getPosition = useCallback((component) => {
     switch (component) {
       case "cu": return geometry?.ports.cu;
       case "cir": return geometry?.ports.cu;
@@ -21,7 +21,7 @@ export function BusAnimation({ busActivity, step, progress, diagramRef }) {
       case "ram": return geometry?.ports.ram;
       default: return geometry?.ports.cu;
     }
-  };
+  }, [geometry]);
 
   // Get color based on bus type
   const getBusColor = (type) => {
@@ -34,19 +34,19 @@ export function BusAnimation({ busActivity, step, progress, diagramRef }) {
   };
 
   // Check if the bus is actually moving between parts
-  const isBusMoving = (source, destination) => {
+  const isBusMoving = useCallback((source, destination) => {
     return source !== destination;
-  };
+  }, []);
 
   // Create animation path from source to destination
-  const createAnimationPath = (source, destination) => {
+  const createAnimationPath = useCallback((source, destination, activity, kind) => {
     const sourcePos = geometry?.nodes[source];
     const destPos = geometry?.nodes[destination];
     if (!sourcePos || !destPos) return null;
 
-    if (busActivity && isBusMoving(busActivity.source, busActivity.destination)) {
-      const from = getPosition(busActivity.source);
-      const to = getPosition(busActivity.destination);
+    if (activity && isBusMoving(activity.source, activity.destination)) {
+      const from = getPosition(activity.source);
+      const to = getPosition(activity.destination);
       return [
         sourcePos,
         { x: from.x, y: sourcePos.y },
@@ -56,15 +56,15 @@ export function BusAnimation({ busActivity, step, progress, diagramRef }) {
         destPos,
       ];
     }
-    if (animation.kind === "increment") {
+    if (kind === "increment") {
       return [{ x: sourcePos.x + 36, y: sourcePos.y - 20 }, { x: sourcePos.x + 36, y: sourcePos.y }, sourcePos];
     }
-    if (animation.kind === "decode" || animation.kind === "halt") {
+    if (kind === "decode" || kind === "halt") {
       return [{ x: sourcePos.left + 8, y: sourcePos.y }, { x: sourcePos.left + sourcePos.width - 8, y: sourcePos.y }];
     }
     const middleX = (sourcePos.x + destPos.x) / 2;
     return [sourcePos, { x: middleX, y: sourcePos.y }, { x: middleX, y: destPos.y }, destPos];
-  };
+  }, [geometry, getPosition, isBusMoving]);
 
   useEffect(() => {
     const diagram = diagramRef.current;
@@ -115,9 +115,18 @@ export function BusAnimation({ busActivity, step, progress, diagramRef }) {
     return { ...points[points.length - 1], total };
   };
 
-  const travel = Math.max(0, Math.min(1, (progress - 0.08) / 0.74));
-  const opacity = Math.min(1, progress / 0.08, (1 - progress) / 0.08);
-  const points = createAnimationPath(animation.source, animation.destination);
+  useEffect(() => {
+    if (!geometry) return;
+    onPathLengths(timeline.map(({ animation, busActivity }) => {
+      const path = createAnimationPath(animation.source, animation.destination, busActivity, animation.kind);
+      return path.slice(1).reduce((length, point, index) => length + Math.hypot(point.x - path[index].x, point.y - path[index].y), 0);
+    }));
+  }, [geometry, timeline, createAnimationPath, onPathLengths]);
+
+  const elapsed = progress * duration;
+  const travel = Math.max(0, Math.min(1, (elapsed - 80) / (duration - 260)));
+  const opacity = Math.min(1, elapsed / 80, (duration - elapsed) / 80);
+  const points = createAnimationPath(animation.source, animation.destination, busActivity, animation.kind);
   const position = points ? animateAlongPath(points, travel) : null;
   const path = points?.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
   const color = { address: "#3b82f6", data: "#ef4444", control: "#22c55e" }[busActivity?.type] || "#8b5cf6";
