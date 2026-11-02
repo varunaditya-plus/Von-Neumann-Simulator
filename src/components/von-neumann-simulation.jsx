@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "./ui/button";
 import { BusAnimation } from "./bus-animation";
+import { AnimatedValue } from "./animated-value";
 import { Bus, Rows3 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { getCurrentCycleName } from "../utils/getCycleName";
@@ -9,18 +10,10 @@ import { getStepExplanation } from "../utils/getStepExplanation";
 
 
 export function VonNeumannSimulation() {
-  const [pc, setPc] = useState(0); // Program Counter
-  const [mar, setMar] = useState(null); // Memory Address Register
-  const [mdr, setMdr] = useState(null); // Memory Data Register
-  const [cir, setCir] = useState(null); // Current Instruction Register
-  const [acc, setAcc] = useState(0); // Accumulator
-  const [currentStep, setCurrentStep] = useState("fetch-pc-to-mar"); // current step in the simulation
-  const [busActivity, setBusActivity] = useState(null); // the bus's current activity
-  const [isHalted, setIsHalted] = useState(false); // if the simulation halted yet
-  const [activeElement, setActiveElement] = useState(null); // the current active element in the simulation
+  const [timelinePosition, setTimelinePosition] = useState(0);
   const [isExecutingStep, setIsExecutingStep] = useState(false); // Track if a step is currently being executed
 
-  const ram = [
+  const initialRam = [
     "LOAD 5", // 0: Load address 5 value into ACC
     "ADD 6", // 1: Add address 6 value to ACC
     "STORE 7", // 2: Store ACC value to address 7
@@ -31,346 +24,392 @@ export function VonNeumannSimulation() {
     "0", // 7: Result will be stored here
   ];
 
-  const timeoutRef = useRef(null);
+  const [timeline] = useState(() => {
+    const steps = [];
+    let state = { pc: 0, mar: null, mdr: null, cir: null, acc: 0,
+      currentStep: "fetch-pc-to-mar", isHalted: false, ram: initialRam };
+    while (!state.isHalted) {
+      const step = getSimulationStep(state);
+      steps.push({ state, ...step });
+      state = step.nextState;
+    }
+    return steps;
+  });
+  const timelineEnd = timeline.length * 1000;
+  const stepIndex = Math.min(Math.floor(timelinePosition / 1000), timeline.length - 1);
+  const stepProgress = (timelinePosition - stepIndex * 1000) / 1000;
+  const step = timeline[stepIndex];
+  const simulation = step.state;
+  const { pc, mar, mdr, cir, acc, ram, currentStep } = simulation;
+  const isHalted = stepProgress === 1 && step.nextState.isHalted;
+  const { busActivity } = step;
+  const activeElement = stepProgress === 0 ? null
+    : stepProgress < 0.5 ? step.sourceElement : step.activeElement;
+  const playbackRef = useRef(null);
+  const diagramRef = useRef(null);
 
-  const resetSimulation = () => {
-    setPc(0);
-    setMar(null);
-    setMdr(null);
-    setCir(null);
-    setAcc(0);
-    setCurrentStep("fetch-pc-to-mar");
-    setBusActivity(null);
-    setIsHalted(false);
-    setActiveElement(null);
-    setIsExecutingStep(false);
-
-    if (timeoutRef.current) { clearTimeout(timeoutRef.current); }
+  const activityStyle = (element) => {
+    const source = element === step.animation.source ? Math.sin(Math.PI * Math.min(1, stepProgress / 0.65)) : 0;
+    const destination = element === step.animation.destination ? Math.sin(Math.PI * Math.max(0, (stepProgress - 0.35) / 0.65)) : 0;
+    const intensity = Math.max(source, destination);
+    return { boxShadow: `0 0 0 ${3 * intensity}px rgba(250, 204, 21, ${intensity})` };
   };
 
-  const nextStep = () => {
-    if (isHalted || isExecutingStep) return;
+  const resetSimulation = () => {
+    setTimelinePosition(0);
+    setIsExecutingStep(false);
+  };
 
-    setIsExecutingStep(true);
-    setActiveElement(null);
+  // Keep a start and end snapshot for each step so dragging can reverse it.
+  function getSimulationStep(state) {
+    const { pc, mar, mdr, cir, acc, currentStep } = state;
+    const ram = [...state.ram];
+    const nextState = { ...state, ram };
+    let busActivity = null;
+    let activeElement = null;
 
     switch (currentStep) {
       case "fetch-pc-to-mar":
         // PC to MAR
-        setActiveElement("pc");
-        setMar(pc);
-        setBusActivity(null);
-        timeoutRef.current = setTimeout(() => {
-          setActiveElement("mar");
-          timeoutRef.current = setTimeout(() => {
-            setCurrentStep("fetch-mar-to-ram");
-            setActiveElement(null);
-            setIsExecutingStep(false);
-          }, 1000);
-        }, 1000);
+        nextState.mar = pc;
+        busActivity = null;
+        activeElement = "mar";
+        nextState.currentStep = "fetch-mar-to-ram";
         break;
 
       case "fetch-mar-to-ram":
         // MAR to RAM (address bus)
-        setBusActivity({
+        busActivity = {
           type: "address",
           source: "registers",
           destination: "ram",
           purpose:
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read from.",
-        });
-        setActiveElement(`ram-${mar}`);
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("fetch-ram-to-mdr");
-          setIsExecutingStep(false);
-        }, 1000);
+        };
+        activeElement = `ram-${mar}`;
+        nextState.currentStep = "fetch-ram-to-mdr";
         break;
 
       case "fetch-ram-to-mdr":
         // RAM to MDR (data bus)
-        setBusActivity({
+        busActivity = {
           type: "data",
           source: "ram",
           destination: "registers",
           purpose:
             "The data bus is carrying the instruction data from the specified RAM location back to the Memory Data Register (MDR) in the CPU.",
-        });
-        setMdr(ram[mar]);
-        setActiveElement("mdr");
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("fetch-mdr-to-cir");
-          setIsExecutingStep(false);
-        }, 1000);
+        };
+        nextState.mdr = ram[mar];
+        activeElement = "mdr";
+        nextState.currentStep = "fetch-mdr-to-cir";
         break;
 
       case "fetch-mdr-to-cir":
         // MDR to CIR
-        setBusActivity(null);
-        setCir(mdr);
-        setActiveElement("cir");
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("fetch-increment-pc");
-          setIsExecutingStep(false);
-        }, 1000);
+        busActivity = null;
+        nextState.cir = mdr;
+        activeElement = "cir";
+        nextState.currentStep = "fetch-increment-pc";
         break;
 
       case "fetch-increment-pc":
         // Increment PC
-        setBusActivity(null);
-        setPc(pc + 1);
-        setActiveElement("pc");
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("decode");
-          setIsExecutingStep(false);
-        }, 1000);
+        busActivity = null;
+        nextState.pc = pc + 1;
+        activeElement = "pc";
+        nextState.currentStep = "decode";
         break;
 
       case "decode":
         // Decode instruction
-        setBusActivity(null);
-        setActiveElement("cir");
-        timeoutRef.current = setTimeout(() => {
-          // Determine which execute step to go to based on the instruction
-          if (cir?.startsWith("LOAD")) {
-            setCurrentStep("execute-load-1");
-          } else if (cir?.startsWith("ADD")) {
-            setCurrentStep("execute-add-1");
-          } else if (cir?.startsWith("STORE")) {
-            setCurrentStep("execute-store-1");
-          } else if (cir?.startsWith("HALT")) {
-            setCurrentStep("execute-halt");
-          }
-          setIsExecutingStep(false);
-        }, 1000);
+        busActivity = null;
+        activeElement = "cir";
+        // Determine which execute step to go to based on the instruction
+        if (cir?.startsWith("LOAD")) {
+          nextState.currentStep = "execute-load-1";
+        } else if (cir?.startsWith("ADD")) {
+          nextState.currentStep = "execute-add-1";
+        } else if (cir?.startsWith("STORE")) {
+          nextState.currentStep = "execute-store-1";
+        } else if (cir?.startsWith("HALT")) {
+          nextState.currentStep = "execute-halt";
+        }
         break;
 
-      case "execute-load-1":
+      case "execute-load-1": {
         const loadAddress = Number.parseInt(cir?.split(" ")[1] || "0");
         
         // First set MAR with the address
-        setMar(loadAddress);
-        setBusActivity(null);
-        setActiveElement("mar");
+        nextState.mar = loadAddress;
+        busActivity = null;
+        activeElement = "mar";
         
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("execute-load-2");
-          setIsExecutingStep(false);
-        }, 1000);
+        nextState.currentStep = "execute-load-2";
         break;
+      }
 
-      case "execute-load-2":
+      case "execute-load-2": {
         const loadAddr = Number.parseInt(cir?.split(" ")[1] || "0");
         // Then fetch from RAM using address bus
-        setBusActivity({
+        busActivity = {
           type: "address",
           source: "registers",
           destination: "ram",
           purpose:
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from.",
-        });
-        setActiveElement(`ram-${loadAddr}`);
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("execute-load-3");
-          setIsExecutingStep(false);
-        }, 1000);
+        };
+        activeElement = `ram-${loadAddr}`;
+        nextState.currentStep = "execute-load-3";
         break;
+      }
 
-      case "execute-load-3":
+      case "execute-load-3": {
         const loadAddr2 = Number.parseInt(cir?.split(" ")[1] || "0");
         // Then get data back via data bus
-        setMdr(ram[loadAddr2]);
-        setBusActivity({
+        nextState.mdr = ram[loadAddr2];
+        busActivity = {
           type: "data",
           source: "ram",
           destination: "registers",
           purpose:
             "The data bus is carrying the data value from RAM back to the Memory Data Register (MDR) in the CPU.",
-        });
-        setActiveElement("mdr");
+        };
+        activeElement = "mdr";
         
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("execute-load-4");
-          setIsExecutingStep(false);
-        }, 1000);
+        nextState.currentStep = "execute-load-4";
         break;
+      }
 
-      case "execute-load-4":
+      case "execute-load-4": {
         const loadAddr3 = Number.parseInt(cir?.split(" ")[1] || "0");
         // Finally update ACC
-        setAcc(Number.parseInt(ram[loadAddr3]));
-        setBusActivity({
+        nextState.acc = Number.parseInt(ram[loadAddr3]);
+        busActivity = {
           type: "control",
           source: "registers",
           destination: "alu",
           purpose:
             "The control bus is carrying control signals to load the value from MDR into the Accumulator (ACC) in the ALU.",
-        });
-        setActiveElement("acc");
+        };
+        activeElement = "acc";
         
-        timeoutRef.current = setTimeout(() => {
-          // Go back to fetch cycle
-          setCurrentStep("fetch-pc-to-mar");
-          setIsExecutingStep(false);
-        }, 1000);
+        // Go back to fetch cycle
+        nextState.currentStep = "fetch-pc-to-mar";
         break;
+      }
 
-      case "execute-add-1":
+      case "execute-add-1": {
         const addAddress = Number.parseInt(cir?.split(" ")[1] || "0");
         
         // First set MAR with the address
-        setMar(addAddress);
-        setBusActivity(null);
-        setActiveElement("mar");
+        nextState.mar = addAddress;
+        busActivity = null;
+        activeElement = "mar";
         
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("execute-add-2");
-          setIsExecutingStep(false);
-        }, 1000);
+        nextState.currentStep = "execute-add-2";
         break;
+      }
 
-      case "execute-add-2":
+      case "execute-add-2": {
         const addAddr = Number.parseInt(cir?.split(" ")[1] || "0");
         // Then fetch from RAM using address bus
-        setBusActivity({
+        busActivity = {
           type: "address",
           source: "registers",
           destination: "ram",
           purpose:
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to read the data from for addition.",
-        });
-        setActiveElement(`ram-${addAddr}`);
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("execute-add-3");
-          setIsExecutingStep(false);
-        }, 1000);
+        };
+        activeElement = `ram-${addAddr}`;
+        nextState.currentStep = "execute-add-3";
         break;
+      }
 
-      case "execute-add-3":
+      case "execute-add-3": {
         const addAddr2 = Number.parseInt(cir?.split(" ")[1] || "0");
         // Then get data back via data bus
-        setMdr(ram[addAddr2]);
-        setBusActivity({
+        nextState.mdr = ram[addAddr2];
+        busActivity = {
           type: "data",
           source: "ram",
           destination: "registers",
           purpose:
             "The data bus is carrying the data value from RAM back to the Memory Data Register (MDR) in the CPU for the addition operation.",
-        });
-        setActiveElement("mdr");
+        };
+        activeElement = "mdr";
         
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("execute-add-4");
-          setIsExecutingStep(false);
-        }, 1000);
+        nextState.currentStep = "execute-add-4";
         break;
+      }
 
-      case "execute-add-4":
+      case "execute-add-4": {
         const addAddr3 = Number.parseInt(cir?.split(" ")[1] || "0");
         // Finally update ACC with addition
         const newAcc = acc + Number.parseInt(ram[addAddr3]);
-        setAcc(newAcc);
-        setBusActivity({
+        nextState.acc = newAcc;
+        busActivity = {
           type: "control",
           source: "registers",
           destination: "alu",
           purpose:
             "The control bus is carrying control signals to the ALU to add the value from MDR to the current value in the Accumulator (ACC).",
-        });
-        setActiveElement("acc");
+        };
+        activeElement = "acc";
         
-        timeoutRef.current = setTimeout(() => {
-          // Go back to fetch cycle
-          setCurrentStep("fetch-pc-to-mar");
-          setIsExecutingStep(false);
-        }, 1000);
+        // Go back to fetch cycle
+        nextState.currentStep = "fetch-pc-to-mar";
         break;
+      }
 
-      case "execute-store-1":
+      case "execute-store-1": {
         const storeAddress = Number.parseInt(cir?.split(" ")[1] || "0");
         
         // First set MAR with the address
-        setMar(storeAddress);
-        setBusActivity(null);
-        setActiveElement("mar");
+        nextState.mar = storeAddress;
+        busActivity = null;
+        activeElement = "mar";
         
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("execute-store-2");
-          setIsExecutingStep(false);
-        }, 1000);
+        nextState.currentStep = "execute-store-2";
         break;
+      }
 
       case "execute-store-2":
         // Then set MDR with ACC value
-        setMdr(acc.toString());
-        setBusActivity(null);
-        setActiveElement("mdr");
+        nextState.mdr = acc.toString();
+        busActivity = null;
+        activeElement = "mdr";
         
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("execute-store-3");
-          setIsExecutingStep(false);
-        }, 1000);
+        nextState.currentStep = "execute-store-3";
         break;
 
-      case "execute-store-3":
+      case "execute-store-3": {
         const storeAddr = Number.parseInt(cir?.split(" ")[1] || "0");
         // Send address to RAM
-        setBusActivity({
+        busActivity = {
           type: "address",
           source: "registers",
           destination: "ram",
           purpose:
             "The address bus is carrying the memory address from MAR to RAM to specify which memory location to write the data to.",
-        });
-        setActiveElement(`ram-${storeAddr}`);
-        timeoutRef.current = setTimeout(() => {
-          setCurrentStep("execute-store-4");
-          setIsExecutingStep(false);
-        }, 1000);
+        };
+        activeElement = `ram-${storeAddr}`;
+        nextState.currentStep = "execute-store-4";
         break;
+      }
 
-      case "execute-store-4":
+      case "execute-store-4": {
         const storeAddr2 = Number.parseInt(cir?.split(" ")[1] || "0");
         // Send data to RAM
         ram[storeAddr2] = acc.toString();
-        setBusActivity({
+        busActivity = {
           type: "data",
           source: "registers",
           destination: "ram",
           purpose: "The data bus is carrying the data value from MDR to be stored at the specified RAM location.",
-        });
+        };
         
-        timeoutRef.current = setTimeout(() => {
-          // Go back to fetch cycle
-          setCurrentStep("fetch-pc-to-mar");
-          setIsExecutingStep(false);
-        }, 1000);
+        // Go back to fetch cycle
+        nextState.currentStep = "fetch-pc-to-mar";
         break;
+      }
 
       case "execute-halt":
-        setBusActivity(null);
-        setIsHalted(true);
-        setIsExecutingStep(false);
+        busActivity = null;
+        nextState.isHalted = true;
         break;
     }
+
+    const kind = currentStep === "fetch-increment-pc" ? "increment"
+      : currentStep === "decode" ? "decode"
+      : currentStep === "execute-halt" ? "halt" : "transfer";
+    if (!activeElement) activeElement = busActivity?.destination === "ram" ? `ram-${mar}` : "cir";
+    const sourceElement = busActivity ? (busActivity.source === "ram" ? `ram-${mar}`
+      : busActivity.type === "address" ? "mar" : "mdr")
+      : currentStep === "fetch-pc-to-mar" ? "pc"
+      : currentStep === "fetch-mdr-to-cir" ? "mdr"
+      : currentStep === "execute-store-2" ? "acc"
+      : currentStep.endsWith("-1") ? "cir" : activeElement;
+    let value = nextState[activeElement];
+    if (busActivity?.type === "address") value = mar;
+    else if (busActivity?.type === "data") value = busActivity.source === "ram" ? nextState.mdr : mdr;
+    else if (busActivity?.type === "control") value = currentStep === "execute-add-4" ? "ADD" : "LOAD";
+    else if (kind === "increment") value = "+1";
+    else if (kind === "decode") value = cir?.split(" ")[0];
+    else if (kind === "halt") value = "HALT";
+    return { nextState, busActivity, activeElement, sourceElement,
+      animation: { kind, source: sourceElement, destination: activeElement, value },
+      duration: currentStep === "fetch-pc-to-mar" ? 2000 : 1000 };
+  }
+
+  const nextStep = () => {
+    if (isHalted || isExecutingStep) return;
+    playbackRef.current = {
+      from: timelinePosition,
+      target: (stepIndex + 1) * 1000,
+      duration: step.duration,
+      startedAt: performance.now(),
+    };
+    setIsExecutingStep(true);
   };
 
-  // Clean up any timeouts when component unmounts
+  const scrubStep = (event) => {
+    setIsExecutingStep(false);
+    setTimelinePosition(Number(event.currentTarget.value));
+  };
+
   useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+    if (!isExecutingStep) return;
+    const { from, target, duration, startedAt } = playbackRef.current;
+    let frame;
+    const tick = (now) => {
+      const position = Math.min(target, from + (now - startedAt) / duration * 1000);
+      setTimelinePosition(position);
+      if (position === target) {
+        setIsExecutingStep(false);
+      } else {
+        frame = requestAnimationFrame(tick);
       }
     };
-  }, []);
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [isExecutingStep]);
 
   return (
-    <div className="space-y-6 mt-8">
+    <div ref={diagramRef} className="relative space-y-6 mt-8">
       <div className="bg-[#eaecf0] text-gray-950 p-4 rounded-t-lg text-center text-xl !mb-0">
         <div>{getCurrentCycleName(currentStep)} → {getStepDescription(currentStep)}</div>
       </div>
 
       <div className="bg-gray-100 p-4 rounded-b-lg text-gray-800">
         <p>{getStepExplanation(currentStep)}</p>
+      </div>
+
+      <div className="simulation-timeline" style={{ "--timeline-progress": `${timelinePosition / timelineEnd * 100}%` }}>
+        <div className="simulation-timeline-track" aria-hidden="true">
+          {timeline.map((entry, index) => (
+            <span
+              key={index}
+              className="simulation-timeline-dot"
+              style={{
+                left: `${(index + 0.5) / timeline.length * 100}%`,
+                background: timelinePosition >= (index + 0.5) * 1000 ? "#ffffff66" : undefined,
+              }}
+            />
+          ))}
+        </div>
+        <input
+          id="step-progress"
+          aria-label="Simulation progress"
+          type="range"
+          min="0"
+          max={timelineEnd}
+          step="1"
+          value={Math.round(timelinePosition)}
+          onPointerDown={() => setIsExecutingStep(false)}
+          onChange={scrubStep}
+          aria-valuetext={`Step ${stepIndex + 1} of ${timeline.length}, ${Math.round(stepProgress * 100)}%: ${getStepDescription(currentStep)}`}
+          className="simulation-timeline-input"
+        />
       </div>
 
       <div className="flex justify-center space-x-4 mt-6">
@@ -530,48 +569,48 @@ export function VonNeumannSimulation() {
           </div>
 
           {/* CPU Registers */}
-          <div className="bg-white p-[1.15rem] pt-3 flex flex-col justify-between items-center rounded-xl gap-1.5 z-20">
+          <div data-simulation-port="registers" className="bg-white p-[1.15rem] pt-3 flex flex-col justify-between items-center rounded-xl gap-1.5 z-20">
             <span className="font-bold text-black text-md leading-snug tracking-[0.02em] text-center w-full mb-1">Registers</span>
-            <div className={`flex flex-row w-full h-full ${activeElement === "pc" ? "ring-2 ring-yellow-400" : ""}`}>
+            <div className={`flex flex-row w-full h-full ${activeElement === "pc" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("pc")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">PC</span>
-              <span className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">{pc}</span>
+              <span data-simulation-node="pc" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm"><AnimatedValue before={pc} after={step.nextState.pc} progress={stepProgress} /></span>
             </div>
-            <div className={`flex flex-row w-full h-full ${activeElement === "mar" ? "ring-2 ring-yellow-400" : ""}`}>
+            <div className={`flex flex-row w-full h-full ${activeElement === "mar" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("mar")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">MAR</span>
-              <span className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
-                {mar !== null ? mar : "-"}
+              <span data-simulation-node="mar" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
+                <AnimatedValue before={mar} after={step.nextState.mar} progress={stepProgress} />
               </span>
             </div>
-            <div className={`flex flex-row w-full h-full ${activeElement === "mdr" ? "ring-2 ring-yellow-400" : ""}`}>
+            <div className={`flex flex-row w-full h-full ${activeElement === "mdr" ? "ring-2 ring-yellow-400" : ""}`} style={activityStyle("mdr")}>
               <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">MDR</span>
-              <span className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
-                {mdr !== null ? mdr : "-"}
+              <span data-simulation-node="mdr" className="bg-[#E6E6E6] w-9/12 h-8 py-1 px-2 flex items-center justify-start text-sm">
+                <AnimatedValue before={mdr} after={step.nextState.mdr} progress={stepProgress} />
               </span>
             </div>
           </div>
 
           <div className="flex flex-row gap-2">
             {/* Control unit */}
-            <div className={`bg-[#af8541] p-[1.15rem] py-5 flex flex-col justify-between items-center rounded-xl gap-1 h-32 w-[8.5rem] z-20 ${
+            <div data-simulation-port="cu" className={`bg-[#af8541] p-[1.15rem] py-5 flex flex-col justify-between items-center rounded-xl gap-1 h-32 w-[8.5rem] z-20 ${
               activeElement === "cir" ? "ring-2 ring-yellow-400" : ""
             }`}>
               <span className="font-bold text-white text-md leading-snug tracking-[0.02em] text-center w-full">Control Unit</span>
               <div className="flex flex-col w-full h-full">
                 <span className="bg-[#FFC15E] text-[#382600] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">CIR</span>
-                <span className="bg-[#E6E6E6] w-full h-8 py-1 px-2 flex items-center justify-start text-sm">
-                  {cir !== null ? cir : "-"}
+                <span data-simulation-node="cir" className="bg-[#E6E6E6] w-full h-8 py-1 px-2 flex items-center justify-start text-sm">
+                  <AnimatedValue before={cir} after={step.nextState.cir} progress={stepProgress} />
                 </span>
               </div>
             </div>
 
             {/* ALU Register */}
-            <div className={`bg-black p-[1.15rem] py-5 flex flex-col justify-between items-center rounded-xl gap-1 h-32 w-[7rem] z-20 ${
+            <div data-simulation-port="alu" className={`bg-black p-[1.15rem] py-5 flex flex-col justify-between items-center rounded-xl gap-1 h-32 w-[7rem] z-20 ${
               activeElement === "acc" ? "ring-2 ring-yellow-400" : ""
             }`}>
               <span className="font-bold text-white text-md leading-snug tracking-[0.02em] text-left w-full">ALU</span>
               <div className="flex flex-col w-full h-full">
                 <span className="bg-[#4691E0] text-[#001938] w-full h-8 py-1 px-2 flex items-center justify-center font-bold text-sm">ACC</span>
-                <span className="bg-[#2C2E32] text-white w-full h-8 py-1 px-2 flex items-center justify-start text-sm">{acc}</span>
+                <span data-simulation-node="acc" className="bg-[#2C2E32] text-white w-full h-8 py-1 px-2 flex items-center justify-start text-sm"><AnimatedValue before={acc} after={step.nextState.acc} progress={stepProgress} /></span>
               </div>
             </div>
           </div>
@@ -579,7 +618,7 @@ export function VonNeumannSimulation() {
         </div>
 
         {/* RAM */}
-        <div className={`bg-[#009B99] p-4 rounded-2xl flex flex-col w-[20rem] h-[27.5em] relative ${
+        <div data-simulation-port="ram" className={`bg-[#009B99] p-4 rounded-2xl flex flex-col w-[20rem] h-[27.5em] relative ${
           activeElement && activeElement.startsWith("ram-") ? "ring-2 ring-yellow-400" : ""
         }`}>
           {/* Header */}
@@ -600,9 +639,12 @@ export function VonNeumannSimulation() {
               <div 
                 key={index} 
                 className={`flex flex-row w-full h-full ${activeElement === `ram-${index}` ? "ring-2 ring-yellow-400" : ""}`}
+                style={activityStyle(`ram-${index}`)}
               >
                 <span className="bg-[#00D2C0] text-[#003837] w-3/12 h-7 py-1 px-2 flex items-center justify-center font-bold text-sm">{index}</span>
-                <span className="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm">{content}</span>
+                <span data-simulation-node={`ram-${index}`} className="bg-[#E6E6E6] w-9/12 h-7 py-1 px-2 flex items-center justify-start text-sm">
+                  <AnimatedValue before={content} after={step.nextState.ram[index]} progress={stepProgress} />
+                </span>
               </div>
             ))}
           </div>
@@ -611,7 +653,7 @@ export function VonNeumannSimulation() {
       </div>
 
       {/* Bus Animation Component */}
-      <BusAnimation busActivity={busActivity} />
+      <BusAnimation busActivity={busActivity} step={step} progress={stepProgress} diagramRef={diagramRef} />
 
       {/* Bus Purpose Display */}
       {busActivity && (
