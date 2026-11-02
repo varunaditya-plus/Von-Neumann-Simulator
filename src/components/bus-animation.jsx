@@ -139,7 +139,7 @@ export function BusAnimation({ busActivity, step, progress, duration, diagramRef
     <>
       <div className="relative h-12 mt-4 w-full">
         {/* Bus Line */}
-        <div ref={railRef} className="w-[41rem] h-3 bg-[#A8AAAF] rounded-full mx-auto"></div>
+        <div ref={railRef} className="relative z-20 w-[41rem] h-3 bg-[#A8AAAF] rounded-full mx-auto"></div>
 
         {/* Vertical Connectors */}
         <div className="absolute w-3 h-12 bg-[#8e6e3a] left-[29.5%] top-0" style={connectorStyle("cu")}></div> {/* CU */}
